@@ -598,6 +598,7 @@ describe('bulk import, export and scan lookup', () => {
   it('imports opening stock through the ledger', async () => {
     const productId = await productBySku(session.organizationId, 'GRO-010');
     const before = await stockQuantity(productId, mainWarehouse);
+    const ledgerBefore = await ledgerCount(productId, 'OPENING_STOCK_IMPORT');
 
     const response = await api()
       .post('/api/inventory/opening-stock/import')
@@ -609,6 +610,6 @@ describe('bulk import, export and scan lookup', () => {
 
     const after = await stockQuantity(productId, mainWarehouse);
     expect(after.quantity.minus(before.quantity).toNumber()).toBe(15);
-    expect(await ledgerCount(productId, 'OPENING_STOCK_IMPORT')).toBe(1);
+    expect(await ledgerCount(productId, 'OPENING_STOCK_IMPORT')).toBe(ledgerBefore + 1);
   });
 });
