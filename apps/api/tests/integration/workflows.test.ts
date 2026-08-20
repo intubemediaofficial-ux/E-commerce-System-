@@ -534,3 +534,81 @@ describe('tenant isolation', () => {
     expect(response.body.success).toBe(false);
   });
 });
+
+describe('bulk import, export and scan lookup', () => {
+  it('resolves a SKU through the scanner lookup endpoint', async () => {
+    const response = await api()
+      .get('/api/products/lookup')
+      .query({ code: 'ING-PATTY' })
+      .set('Authorization', bearer())
+      .expect(200);
+    expect(response.body.data.product.sku).toBe('ING-PATTY');
+    expect(Array.isArray(response.body.data.product.stock)).toBe(true);
+  });
+
+  it('returns PRODUCT_NOT_FOUND for an unknown scan code', async () => {
+    const response = await api()
+      .get('/api/products/lookup')
+      .query({ code: 'NO-SUCH-CODE' })
+      .set('Authorization', bearer())
+      .expect(404);
+    expect(response.body.error.code).toBe('PRODUCT_NOT_FOUND');
+  });
+
+  it('exports products as CSV', async () => {
+    const response = await api()
+      .get('/api/products/export')
+      .query({ format: 'csv' })
+      .set('Authorization', bearer())
+      .expect(200);
+    expect(response.headers['content-type']).toContain('text/csv');
+    expect(response.text.split('\n')[0]).toContain('SKU');
+    expect(response.text).toContain('ING-PATTY');
+  });
+
+  it('imports products from CSV and reports per-row errors', async () => {
+    const sku = `IMP-${randomUUID().slice(0, 8)}`;
+    const csv = [
+      'sku,name,unit,productType,purchasePrice,sellingPrice,reorderLevel',
+      `${sku},Imported Product,PCS,FINISHED_PRODUCT,12.5,20,5`,
+      `${sku}-BAD,Bad Unit Product,NOPE,FINISHED_PRODUCT,1,2,0`,
+    ].join('\n');
+
+    const response = await api()
+      .post('/api/products/import')
+      .set('Authorization', bearer())
+      .send({ csv })
+      .expect(200);
+    expect(response.body.data.created).toBe(1);
+    expect(response.body.data.errors).toHaveLength(1);
+
+    const product = await prisma.product.findFirstOrThrow({
+      where: { organizationId: session.organizationId, sku },
+    });
+    expect(product.sellingPrice.toNumber()).toBe(20);
+
+    const rerun = await api()
+      .post('/api/products/import')
+      .set('Authorization', bearer())
+      .send({ csv: `sku,name,unit,sellingPrice\n${sku},Imported Product,PCS,25` })
+      .expect(200);
+    expect(rerun.body.data.updated).toBe(1);
+  });
+
+  it('imports opening stock through the ledger', async () => {
+    const productId = await productBySku(session.organizationId, 'GRO-010');
+    const before = await stockQuantity(productId, mainWarehouse);
+
+    const response = await api()
+      .post('/api/inventory/opening-stock/import')
+      .set('Authorization', bearer())
+      .send({ csv: 'sku,warehouseCode,quantity,unitCost\nGRO-010,JAI-MAIN,15,9.5\nNOPE,JAI-MAIN,4,1' })
+      .expect(200);
+    expect(response.body.data.applied).toBe(1);
+    expect(response.body.data.errors).toHaveLength(1);
+
+    const after = await stockQuantity(productId, mainWarehouse);
+    expect(after.quantity.minus(before.quantity).toNumber()).toBe(15);
+    expect(await ledgerCount(productId, 'OPENING_STOCK_IMPORT')).toBe(1);
+  });
+});

@@ -11,10 +11,12 @@ import {
   skipTake,
   uuidParam,
 } from '../../lib/query';
+import { parseCsv } from '../../lib/csv';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { orgId, requirePermission } from '../../middleware/auth';
 import { auditFromRequest } from '../../services/audit.service';
+import { Column, ExportFormat, sendReport } from '../../services/export.service';
 
 const router = Router();
 
@@ -47,6 +49,57 @@ const createSchema = z.object({
   shelfLifeDays: z.coerce.number().int().positive().nullable().optional(),
   imageUrl: z.string().url().nullable().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']).optional(),
+});
+
+const exportFormat = z.enum(['json', 'csv', 'excel', 'pdf']).default('csv');
+
+interface ProductExportRow extends Record<string, string> {
+  sku: string;
+  name: string;
+}
+
+const PRODUCT_EXPORT_COLUMNS: Column<ProductExportRow>[] = [
+  { header: 'SKU', key: 'sku' },
+  { header: 'Name', key: 'name', width: 32 },
+  { header: 'Barcode', key: 'barcode' },
+  { header: 'Type', key: 'productType' },
+  { header: 'Unit', key: 'unit', width: 10 },
+  { header: 'Category', key: 'category' },
+  { header: 'Brand', key: 'brand' },
+  { header: 'Purchase Price', key: 'purchasePrice' },
+  { header: 'Selling Price', key: 'sellingPrice' },
+  { header: 'Tax Rate', key: 'taxRate' },
+  { header: 'Reorder Level', key: 'reorderLevel' },
+  { header: 'Status', key: 'status' },
+];
+
+const csvBoolean = z
+  .string()
+  .optional()
+  .transform((value) => ['1', 'true', 'yes', 'y'].includes((value ?? '').toLowerCase()));
+
+const csvNumber = z
+  .string()
+  .optional()
+  .transform((value) => (value === undefined || value === '' ? '0' : value))
+  .refine((value) => Number.isFinite(Number(value)) && Number(value) >= 0, {
+    message: 'Numeric columns must be zero or greater.',
+  });
+
+const importRowSchema = z.object({
+  sku: z.string().trim().min(1).max(60),
+  name: z.string().trim().min(1).max(200),
+  barcode: z.string().trim().max(60).optional().default(''),
+  productType: z.enum(PRODUCT_TYPES).default('FINISHED_PRODUCT'),
+  unit: z.string().trim().min(1),
+  category: z.string().trim().optional().default(''),
+  brand: z.string().trim().optional().default(''),
+  purchasePrice: csvNumber,
+  sellingPrice: csvNumber,
+  taxRate: csvNumber,
+  reorderLevel: csvNumber,
+  trackBatches: csvBoolean,
+  isPerishable: csvBoolean,
 });
 
 const SORTABLE = ['name', 'sku', 'sellingPrice', 'purchasePrice', 'createdAt', 'updatedAt'] as const;
@@ -95,6 +148,149 @@ router.get(
       prisma.product.count({ where }),
     ]);
     return ok(res, rows, pageMeta(q.page, q.perPage, total));
+  }),
+);
+
+/** Scanner friendly lookup: resolves a SKU or barcode on either a product or a variant. */
+router.get(
+  '/lookup',
+  requirePermission('product.view'),
+  validate({ query: z.object({ code: z.string().trim().min(1).max(60) }) }),
+  asyncHandler(async (req, res) => {
+    const organizationId = orgId(req);
+    const code = (req.query as { code: string }).code;
+
+    const product = await prisma.product.findFirst({
+      where: { organizationId, OR: [{ sku: code }, { barcode: code }] },
+      include: {
+        unit: { select: { id: true, code: true, name: true } },
+        stock: { include: { warehouse: { select: { id: true, name: true, code: true } } } },
+      },
+    });
+    if (product) return ok(res, { product, variant: null });
+
+    const variant = await prisma.productVariant.findFirst({
+      where: { product: { organizationId }, OR: [{ sku: code }, { barcode: code }] },
+      include: {
+        product: { include: { unit: { select: { id: true, code: true, name: true } } } },
+        stock: { include: { warehouse: { select: { id: true, name: true, code: true } } } },
+      },
+    });
+    if (!variant) throw notFound('PRODUCT_NOT_FOUND', 'No product or variant matches this code.');
+    return ok(res, { product: variant.product, variant });
+  }),
+);
+
+router.get(
+  '/export',
+  requirePermission('product.view'),
+  validate({ query: z.object({ format: exportFormat }) }),
+  asyncHandler(async (req, res) => {
+    const rows = await prisma.product.findMany({
+      where: { organizationId: orgId(req) },
+      orderBy: { sku: 'asc' },
+      include: {
+        unit: { select: { code: true } },
+        category: { select: { name: true } },
+        brand: { select: { name: true } },
+      },
+    });
+    await sendReport(
+      res,
+      (req.query as { format: ExportFormat }).format,
+      'Products',
+      PRODUCT_EXPORT_COLUMNS,
+      rows.map((row) => ({
+        sku: row.sku,
+        name: row.name,
+        barcode: row.barcode ?? '',
+        productType: row.productType,
+        unit: row.unit.code,
+        category: row.category?.name ?? '',
+        brand: row.brand?.name ?? '',
+        purchasePrice: row.purchasePrice.toFixed(2),
+        sellingPrice: row.sellingPrice.toFixed(2),
+        taxRate: row.taxRate.toFixed(2),
+        reorderLevel: row.reorderLevel.toFixed(4),
+        status: row.status,
+      })),
+    );
+  }),
+);
+
+/**
+ * Bulk product upsert from CSV. Rows are keyed by SKU inside the organization so
+ * the same file can be replayed to correct pricing or stock thresholds.
+ */
+router.post(
+  '/import',
+  requirePermission('product.create'),
+  validate({ body: z.object({ csv: z.string().min(1) }) }),
+  asyncHandler(async (req, res) => {
+    const organizationId = orgId(req);
+    const rows = parseCsv((req.body as { csv: string }).csv);
+    const [units, categories, brands] = await Promise.all([
+      prisma.unit.findMany({ where: { organizationId }, select: { id: true, code: true } }),
+      prisma.category.findMany({ where: { organizationId }, select: { id: true, name: true } }),
+      prisma.brand.findMany({ where: { organizationId }, select: { id: true, name: true } }),
+    ]);
+    const unitByCode = new Map(units.map((unit) => [unit.code.toUpperCase(), unit.id]));
+    const categoryByName = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
+    const brandByName = new Map(brands.map((b) => [b.name.toLowerCase(), b.id]));
+
+    const errors: { row: number; message: string }[] = [];
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    for (const [index, row] of rows.entries()) {
+      const parsed = importRowSchema.safeParse(row);
+      if (!parsed.success) {
+        errors.push({ row: index + 2, message: parsed.error.issues[0].message });
+        continue;
+      }
+      const unitId = unitByCode.get(parsed.data.unit.toUpperCase());
+      if (!unitId) {
+        errors.push({ row: index + 2, message: `Unknown unit "${parsed.data.unit}".` });
+        continue;
+      }
+
+      const data = {
+        name: parsed.data.name,
+        barcode: parsed.data.barcode || null,
+        productType: parsed.data.productType,
+        unitId,
+        categoryId: parsed.data.category
+          ? categoryByName.get(parsed.data.category.toLowerCase()) ?? null
+          : null,
+        brandId: parsed.data.brand ? brandByName.get(parsed.data.brand.toLowerCase()) ?? null : null,
+        purchasePrice: parsed.data.purchasePrice,
+        sellingPrice: parsed.data.sellingPrice,
+        taxRate: parsed.data.taxRate,
+        reorderLevel: parsed.data.reorderLevel,
+        trackBatches: parsed.data.trackBatches,
+        isPerishable: parsed.data.isPerishable,
+      };
+
+      const existing = await prisma.product.findFirst({
+        where: { organizationId, sku: parsed.data.sku },
+        select: { id: true },
+      });
+      if (existing) {
+        await prisma.product.update({ where: { id: existing.id }, data });
+        updatedCount += 1;
+      } else {
+        await prisma.product.create({ data: { ...data, organizationId, sku: parsed.data.sku } });
+        createdCount += 1;
+      }
+    }
+
+    await auditFromRequest(req, {
+      action: 'PRODUCT_BULK_IMPORT',
+      module: 'product',
+      entityType: 'Product',
+      newValue: { created: createdCount, updated: updatedCount, failed: errors.length },
+    });
+    return ok(res, { created: createdCount, updated: updatedCount, errors });
   }),
 );
 

@@ -6,12 +6,18 @@ import { created, ok, pageMeta } from '../../lib/http';
 import { badRequest, invalidState, notFound } from '../../lib/errors';
 import { D, ZERO } from '../../lib/decimal';
 import { orderBy, paginationSchema, positiveDecimal, skipTake } from '../../lib/query';
+import { parseCsv } from '../../lib/csv';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { idempotency } from '../../middleware/idempotency';
 import { orgId, requirePermission, userId } from '../../middleware/auth';
 import { auditFromRequest } from '../../services/audit.service';
-import { applyMovement, consumeStock, getSettings } from '../../services/inventory.service';
+import {
+  applyMovement,
+  consumeStock,
+  getSettings,
+  receiveStock,
+} from '../../services/inventory.service';
 import { checkStockThresholds } from '../../services/notification.service';
 import { nextDocumentNumber } from '../../services/numbering.service';
 
@@ -569,6 +575,100 @@ router.get(
     });
 
     return ok(res, buckets);
+  }),
+);
+
+const openingStockRow = z.object({
+  sku: z.string().trim().min(1),
+  warehouseCode: z.string().trim().min(1),
+  quantity: z.string().trim().min(1),
+  unitCost: z.string().trim().optional().default('0'),
+  batchNumber: z.string().trim().optional().default(''),
+  expiryDate: z.string().trim().optional().default(''),
+});
+
+/**
+ * Bulk opening stock from CSV. Every row still flows through the inventory
+ * service so the ledger stays the single source of truth for stock movements.
+ */
+router.post(
+  '/opening-stock/import',
+  requirePermission('inventory.adjust'),
+  validate({ body: z.object({ csv: z.string().min(1) }) }),
+  idempotency,
+  asyncHandler(async (req, res) => {
+    const organizationId = orgId(req);
+    const performedBy = userId(req);
+    const rows = parseCsv((req.body as { csv: string }).csv);
+
+    const [products, warehouses] = await Promise.all([
+      prisma.product.findMany({
+        where: { organizationId },
+        select: { id: true, sku: true, trackBatches: true },
+      }),
+      prisma.warehouse.findMany({ where: { organizationId }, select: { id: true, code: true } }),
+    ]);
+    const productBySku = new Map(products.map((product) => [product.sku.toUpperCase(), product]));
+    const warehouseByCode = new Map(warehouses.map((w) => [w.code.toUpperCase(), w.id]));
+
+    const errors: { row: number; message: string }[] = [];
+    let applied = 0;
+
+    for (const [index, raw] of rows.entries()) {
+      const rowNumber = index + 2;
+      const parsed = openingStockRow.safeParse(raw);
+      if (!parsed.success) {
+        errors.push({ row: rowNumber, message: parsed.error.issues[0].message });
+        continue;
+      }
+      const product = productBySku.get(parsed.data.sku.toUpperCase());
+      const warehouseId = warehouseByCode.get(parsed.data.warehouseCode.toUpperCase());
+      const quantity = D(parsed.data.quantity);
+      if (!product) {
+        errors.push({ row: rowNumber, message: `Unknown SKU "${parsed.data.sku}".` });
+        continue;
+      }
+      if (!warehouseId) {
+        errors.push({ row: rowNumber, message: `Unknown warehouse "${parsed.data.warehouseCode}".` });
+        continue;
+      }
+      if (!quantity.isFinite() || quantity.lessThanOrEqualTo(0)) {
+        errors.push({ row: rowNumber, message: 'Quantity must be greater than zero.' });
+        continue;
+      }
+
+      const expiryDate = parsed.data.expiryDate ? new Date(parsed.data.expiryDate) : null;
+      if (expiryDate && Number.isNaN(expiryDate.getTime())) {
+        errors.push({ row: rowNumber, message: 'Expiry date is not a valid date.' });
+        continue;
+      }
+      const batchNumber =
+        parsed.data.batchNumber || (product.trackBatches ? `OPENING-${rowNumber}` : '');
+
+      await transaction((tx) =>
+        receiveStock(tx, {
+          organizationId,
+          productId: product.id,
+          warehouseId,
+          transactionType: 'ADJUSTMENT_IN',
+          quantityChange: quantity,
+          unitCost: D(parsed.data.unitCost || '0'),
+          referenceType: 'OPENING_STOCK_IMPORT',
+          performedBy,
+          notes: 'Opening stock imported from CSV',
+          ...(batchNumber ? { batch: { batchNumber, expiryDate } } : {}),
+        }),
+      );
+      applied += 1;
+    }
+
+    await auditFromRequest(req, {
+      action: 'OPENING_STOCK_IMPORTED',
+      module: 'inventory',
+      entityType: 'InventoryStock',
+      newValue: { applied, failed: errors.length },
+    });
+    return ok(res, { applied, errors });
   }),
 );
 
