@@ -7,7 +7,17 @@ import { receiveStock } from '../src/services/inventory.service';
 const prisma = new PrismaClient();
 
 const ORG_SLUG = 'demo-foods';
-const DEFAULT_PASSWORD = process.env.SEED_PASSWORD ?? 'Admin@12345';
+const DEVELOPMENT_PASSWORD = 'Admin@12345';
+const DEFAULT_PASSWORD = process.env.SEED_PASSWORD?.trim() || DEVELOPMENT_PASSWORD;
+
+if (
+  process.env.NODE_ENV === 'production' &&
+  (!process.env.SEED_PASSWORD || DEFAULT_PASSWORD === DEVELOPMENT_PASSWORD)
+) {
+  throw new Error(
+    'SEED_PASSWORD must be set to a non-default value before seeding production data.',
+  );
+}
 
 const D = (value: number | string): Prisma.Decimal => new Prisma.Decimal(value);
 
