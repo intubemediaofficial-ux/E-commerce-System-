@@ -75,6 +75,48 @@ dashboardRouter.get(
       prisma.stockAdjustment.count({ where: { organizationId, status: 'PENDING_APPROVAL' } }),
     ]);
 
+    const in30Days = new Date(Date.now() + 30 * 86_400_000);
+    const [lowStockRows, expiringBatches, recentMovements] = await Promise.all([
+      prisma.inventoryStock.findMany({
+        where: { organizationId, product: { status: 'ACTIVE' } },
+        select: {
+          quantity: true,
+          reservedQuantity: true,
+          product: { select: { id: true, name: true, sku: true, reorderLevel: true } },
+          warehouse: { select: { name: true } },
+        },
+        orderBy: { quantity: 'asc' },
+        take: 60,
+      }),
+      prisma.inventoryBatch.findMany({
+        where: { organizationId, quantity: { gt: 0 }, expiryDate: { not: null, lte: in30Days } },
+        select: {
+          id: true,
+          batchNumber: true,
+          expiryDate: true,
+          quantity: true,
+          product: { select: { name: true, sku: true } },
+          warehouse: { select: { name: true } },
+        },
+        orderBy: { expiryDate: 'asc' },
+        take: 8,
+      }),
+      prisma.inventoryLedger.findMany({
+        where: { organizationId },
+        select: {
+          id: true,
+          createdAt: true,
+          transactionType: true,
+          quantityChange: true,
+          product: { select: { name: true, sku: true } },
+          warehouse: { select: { name: true } },
+          user: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+    ]);
+
     let inventoryValue = ZERO;
     let reserved = ZERO;
     let lowStock = 0;
@@ -102,6 +144,37 @@ dashboardRouter.get(
       pendingPurchaseOrders,
       pendingTransfers,
       pendingAdjustments,
+      lowStockItems: lowStockRows
+        .filter((row) => D(row.quantity).lessThanOrEqualTo(D(row.product.reorderLevel)))
+        .slice(0, 8)
+        .map((row) => ({
+          productId: row.product.id,
+          product: row.product.name,
+          sku: row.product.sku,
+          warehouse: row.warehouse.name,
+          quantity: num(row.quantity),
+          reserved: num(row.reservedQuantity),
+          reorderLevel: num(row.product.reorderLevel),
+        })),
+      expiringBatches: expiringBatches.map((row) => ({
+        id: row.id,
+        batchNumber: row.batchNumber,
+        product: row.product.name,
+        sku: row.product.sku,
+        warehouse: row.warehouse.name,
+        quantity: num(row.quantity),
+        expiryDate: row.expiryDate,
+      })),
+      recentMovements: recentMovements.map((row) => ({
+        id: row.id,
+        createdAt: row.createdAt,
+        transactionType: row.transactionType,
+        quantityChange: num(row.quantityChange),
+        product: row.product.name,
+        sku: row.product.sku,
+        warehouse: row.warehouse.name,
+        performer: row.user?.name ?? null,
+      })),
     });
   }),
 );

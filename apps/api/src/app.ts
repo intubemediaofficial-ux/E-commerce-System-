@@ -1,3 +1,4 @@
+import fs from 'fs';
 import express, { Application } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -5,7 +6,7 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import pinoHttp from 'pino-http';
 import swaggerUi from 'swagger-ui-express';
-import { corsOrigins, env, isTest } from './config/env';
+import { corsOrigins, env, isTest, uploadDir } from './config/env';
 import { logger } from './lib/logger';
 import { prisma } from './lib/prisma';
 import { authenticate } from './middleware/auth';
@@ -22,12 +23,14 @@ import { ecommerceRouter } from './modules/ecommerce';
 import { reportsRouter } from './modules/reports';
 import { dashboardRouter } from './modules/dashboard';
 import { adminRouter, notificationsRouter } from './modules/admin';
+import uploadsRouter from './modules/uploads/uploads.routes';
 
 export function createApp(): Application {
   const app = express();
 
   app.set('trust proxy', 1);
-  app.use(helmet());
+  // Uploaded images are read by the web app from another origin.
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(
     cors({
       origin: corsOrigins.includes('*') ? true : corsOrigins,
@@ -67,6 +70,17 @@ export function createApp(): Application {
     }
   });
 
+  fs.mkdirSync(uploadDir, { recursive: true });
+  app.use(
+    '/uploads',
+    express.static(uploadDir, {
+      immutable: true,
+      maxAge: '30d',
+      index: false,
+      dotfiles: 'ignore',
+    }),
+  );
+
   app.get('/api/openapi.json', (_req, res) => res.json(openApiDocument));
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
 
@@ -76,6 +90,7 @@ export function createApp(): Application {
   const api = express.Router();
   api.use(authenticate);
   api.use('/products', productsRouter);
+  api.use('/uploads', uploadsRouter);
   api.use('/inventory', inventoryRouter);
   api.use('/stock-transfers', transfersRouter);
   api.use('/restaurant', restaurantRouter);

@@ -3,6 +3,18 @@
 import clsx from 'clsx';
 import { ReactNode } from 'react';
 
+const TONES = {
+  default: {
+    value: 'text-slate-900',
+    accent: 'from-brand-500 to-brand-300',
+  },
+  warning: { value: 'text-amber-600', accent: 'from-amber-500 to-amber-300' },
+  danger: { value: 'text-rose-600', accent: 'from-rose-500 to-rose-300' },
+  success: { value: 'text-emerald-600', accent: 'from-emerald-500 to-emerald-300' },
+} as const;
+
+export type Tone = keyof typeof TONES;
+
 export function PageHeader({
   title,
   subtitle,
@@ -13,9 +25,9 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
         {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -36,18 +48,18 @@ export function StatCard({
   label: string;
   value: string;
   hint?: string;
-  tone?: 'default' | 'warning' | 'danger' | 'success';
+  tone?: Tone;
 }) {
-  const tones = {
-    default: 'text-slate-900',
-    warning: 'text-amber-600',
-    danger: 'text-rose-600',
-    success: 'text-emerald-600',
-  } as const;
   return (
-    <div className="card p-4">
+    <div className="card relative overflow-hidden p-4 transition hover:shadow-lifted">
+      <span
+        className={clsx(
+          'absolute inset-x-0 top-0 h-1 bg-gradient-to-r',
+          TONES[tone].accent,
+        )}
+      />
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={clsx('mt-2 text-2xl font-semibold', tones[tone])}>{value}</p>
+      <p className={clsx('mt-2 text-2xl font-bold tracking-tight', TONES[tone].value)}>{value}</p>
       {hint ? <p className="mt-1 text-xs text-slate-400">{hint}</p> : null}
     </div>
   );
@@ -82,10 +94,25 @@ export function Badge({ value }: { value: string }) {
   );
 }
 
-export function EmptyState({ message }: { message: string }) {
+export function EmptyState({ message, action }: { message: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-3 py-14 text-center">
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.6}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className="h-6 w-6"
+        >
+          <path d="M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Zm2-4h14l2 4H3l2-4Zm4 8h6" />
+        </svg>
+      </span>
       <p className="text-sm font-medium text-slate-500">{message}</p>
+      {action}
     </div>
   );
 }
@@ -102,8 +129,20 @@ export function Spinner({ label = 'Loading' }: { label?: string }) {
 export function ErrorState({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : 'Something went wrong.';
   return (
-    <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-      {message}
+    <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        aria-hidden="true"
+        className="mt-0.5 h-4 w-4 shrink-0"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v5m0 3h.01" />
+      </svg>
+      <span>{message}</span>
     </div>
   );
 }
@@ -141,8 +180,8 @@ export function Modal({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 sm:items-center">
-      <div className="card w-full max-w-2xl">
+    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-[var(--overlay)] p-4 sm:items-center">
+      <div className="card w-full max-w-2xl shadow-lifted">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h2 className="text-base font-semibold text-slate-900">{title}</h2>
           <button type="button" className="text-slate-400 hover:text-slate-600" onClick={onClose}>
@@ -251,7 +290,7 @@ export function DataTable<T>({
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-slate-200">
-        <thead className="bg-slate-50">
+        <thead className="sticky top-0 bg-slate-50">
           <tr>
             {columns.map((column) => (
               <th
@@ -270,7 +309,7 @@ export function DataTable<T>({
           {rows.map((row, index) => (
             <tr
               key={rowKey ? rowKey(row, index) : rowId(row, index)}
-              className="hover:bg-slate-50"
+              className="transition hover:bg-brand-50"
             >
               {columns.map((column) => (
                 <td

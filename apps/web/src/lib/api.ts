@@ -151,6 +151,49 @@ export async function del<T>(path: string): Promise<T> {
   return response.data;
 }
 
+/** Resolves a stored asset path (e.g. `/uploads/…`) against the API origin. */
+export function assetUrl(pathOrUrl: string | null | undefined): string | null {
+  if (!pathOrUrl) return null;
+  if (/^(https?:|data:|blob:)/.test(pathOrUrl)) return pathOrUrl;
+  return `${API_URL}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`;
+}
+
+export interface UploadedImage {
+  url: string;
+  size: number;
+  contentType: string;
+}
+
+/** Uploads an image and returns the stored path to persist on the record. */
+export async function uploadImage(file: File): Promise<UploadedImage> {
+  const body = new FormData();
+  body.append('file', file);
+
+  const send = async (accessToken: string | null): Promise<Response> =>
+    fetch(buildUrl('/api/uploads/images'), {
+      method: 'POST',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body,
+      cache: 'no-store',
+    });
+
+  let response = await send(tokens.access());
+  if (response.status === 401) {
+    const refreshed = await refreshSession();
+    if (refreshed) response = await send(refreshed);
+  }
+
+  const text = await response.text();
+  const payload = text ? (JSON.parse(text) as ApiResponse<UploadedImage>) : undefined;
+  if (!response.ok || !payload?.success) {
+    throw new ApiRequestError(
+      response.status,
+      payload?.error ?? { code: 'UPLOAD_FAILED', message: 'The image could not be uploaded.' },
+    );
+  }
+  return payload.data;
+}
+
 /** Opens a report/export download in a new tab with the bearer token attached. */
 export async function download(path: string, query: Record<string, QueryValue>): Promise<void> {
   const response = await rawRequest(path, { query }, tokens.access());
