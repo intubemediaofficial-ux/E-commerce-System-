@@ -32,6 +32,8 @@ const schema = z.object({
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_KEY: z.string().optional(),
+  UPLOAD_DIR: z.string().default('uploads'),
+  MAX_UPLOAD_MB: z.coerce.number().positive().default(5),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -46,6 +48,11 @@ export const env = parsed.data;
 export const corsOrigins = env.CORS_ORIGINS.split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+
+/** Absolute directory that stores locally uploaded product images. */
+export const uploadDir = path.isAbsolute(env.UPLOAD_DIR)
+  ? env.UPLOAD_DIR
+  : path.resolve(process.cwd(), env.UPLOAD_DIR);
 
 export const isProduction = env.NODE_ENV === 'production';
 export const isTest = env.NODE_ENV === 'test';

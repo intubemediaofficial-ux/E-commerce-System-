@@ -69,6 +69,8 @@ export interface Product {
   trackBatches: boolean;
   isPerishable: boolean;
   status: Status;
+  imageUrl?: string | null;
+  description?: string | null;
   unit?: Unit;
   category?: { id: string; name: string } | null;
   brand?: { id: string; name: string } | null;
@@ -78,6 +80,33 @@ export interface Product {
     reservedQuantity: string;
     warehouse?: { id: string; name: string; code: string };
   }[];
+}
+
+export interface ProductVariant {
+  id: string;
+  name: string;
+  sku: string;
+  barcode: string | null;
+  attributes: Record<string, string>;
+  price: string | null;
+  weight: string | null;
+  status: Status;
+}
+
+export interface ProductBatch {
+  id: string;
+  batchNumber: string;
+  manufacturingDate: string | null;
+  expiryDate: string | null;
+  quantity: string;
+  unitCost: string;
+  warehouseId: string;
+}
+
+export interface ProductDetail extends Product {
+  variants?: ProductVariant[];
+  batches?: ProductBatch[];
+  recipes?: { id: string; name: string; yieldQuantity: string; status: Status }[];
 }
 
 export interface Supplier {

@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 import { AppError } from '../lib/errors';
 import { logger } from '../lib/logger';
@@ -20,6 +21,17 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
         code: 'VALIDATION_ERROR',
         message: 'Request validation failed.',
         details: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      },
+    });
+  }
+
+  if (err instanceof MulterError) {
+    const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+    return res.status(tooLarge ? 413 : 400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: tooLarge ? 'The uploaded file is too large.' : `Upload rejected: ${err.message}.`,
       },
     });
   }

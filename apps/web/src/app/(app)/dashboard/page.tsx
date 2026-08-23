@@ -3,8 +3,39 @@
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { get } from '@/lib/api';
-import { money, qty } from '@/lib/format';
-import { ErrorState, PageHeader, Spinner, StatCard } from '@/components/ui';
+import { dateOnly, dateTime, money, qty, titleCase } from '@/lib/format';
+import { Card, DataTable, ErrorState, PageHeader, Spinner, StatCard } from '@/components/ui';
+
+interface LowStockItem {
+  productId: string;
+  product: string;
+  sku: string;
+  warehouse: string;
+  quantity: string;
+  reserved: string;
+  reorderLevel: string;
+}
+
+interface ExpiringBatch {
+  id: string;
+  batchNumber: string;
+  product: string;
+  sku: string;
+  warehouse: string;
+  quantity: string;
+  expiryDate: string | null;
+}
+
+interface Movement {
+  id: string;
+  createdAt: string;
+  transactionType: string;
+  quantityChange: string;
+  product: string;
+  sku: string;
+  warehouse: string;
+  performer: string | null;
+}
 
 interface AdminDashboard {
   totalProducts: number;
@@ -22,6 +53,9 @@ interface AdminDashboard {
   pendingPurchaseOrders: number;
   pendingTransfers: number;
   pendingAdjustments: number;
+  lowStockItems: LowStockItem[];
+  expiringBatches: ExpiringBatch[];
+  recentMovements: Movement[];
 }
 
 export default function AdminDashboardPage() {
@@ -81,6 +115,96 @@ export default function AdminDashboardPage() {
           tone={data.pendingAdjustments > 0 ? 'warning' : 'default'}
         />
       </div>
+
+      <div className="mt-6 grid gap-4 xl:grid-cols-2">
+        <Card>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="label mb-0">Needs reordering</p>
+            <Link className="text-sm font-medium text-brand-700 hover:underline" href="/inventory">
+              All stock
+            </Link>
+          </div>
+          <DataTable<LowStockItem>
+            rows={data.lowStockItems}
+            rowKey={(row, index) => `${row.productId}-${index}`}
+            emptyMessage="Every product is above its reorder level."
+            columns={[
+              {
+                header: 'Product',
+                cell: (row) => (
+                  <Link className="font-medium text-brand-700 hover:underline" href={`/products/${row.productId}`}>
+                    {row.product}
+                  </Link>
+                ),
+              },
+              { header: 'Warehouse', cell: (row) => row.warehouse },
+              { header: 'On hand', align: 'right', cell: (row) => qty(row.quantity) },
+              { header: 'Reorder at', align: 'right', cell: (row) => qty(row.reorderLevel) },
+            ]}
+          />
+        </Card>
+
+        <Card>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="label mb-0">Expiring within 30 days</p>
+            <Link
+              className="text-sm font-medium text-brand-700 hover:underline"
+              href="/inventory/batches"
+            >
+              All batches
+            </Link>
+          </div>
+          <DataTable<ExpiringBatch>
+            rows={data.expiringBatches}
+            emptyMessage="No batch expires in the next 30 days."
+            columns={[
+              { header: 'Product', cell: (row) => row.product },
+              { header: 'Batch', cell: (row) => <span className="font-mono text-xs">{row.batchNumber}</span> },
+              { header: 'Expires', cell: (row) => dateOnly(row.expiryDate) },
+              { header: 'Quantity', align: 'right', cell: (row) => qty(row.quantity) },
+            ]}
+          />
+        </Card>
+      </div>
+
+      <Card className="mt-4">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="label mb-0">Latest stock movements</p>
+          <Link
+            className="text-sm font-medium text-brand-700 hover:underline"
+            href="/inventory/ledger"
+          >
+            Full ledger
+          </Link>
+        </div>
+        <DataTable<Movement>
+          rows={data.recentMovements}
+          emptyMessage="No inventory movement recorded yet."
+          columns={[
+            { header: 'When', cell: (row) => dateTime(row.createdAt) },
+            { header: 'Type', cell: (row) => titleCase(row.transactionType) },
+            { header: 'Product', cell: (row) => row.product },
+            { header: 'Warehouse', cell: (row) => row.warehouse },
+            {
+              header: 'Change',
+              align: 'right',
+              cell: (row) => (
+                <span
+                  className={
+                    Number(row.quantityChange) < 0
+                      ? 'font-semibold text-rose-600'
+                      : 'font-semibold text-emerald-600'
+                  }
+                >
+                  {Number(row.quantityChange) > 0 ? '+' : ''}
+                  {qty(row.quantityChange)}
+                </span>
+              ),
+            },
+            { header: 'By', cell: (row) => row.performer ?? 'System' },
+          ]}
+        />
+      </Card>
 
       <div className="mt-6 flex flex-wrap gap-2">
         <Link className="btn-secondary" href="/inventory">

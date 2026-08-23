@@ -4,35 +4,130 @@
 
 :root {
   color-scheme: light;
+
+  --surface: #ffffff;
+
+  --slate-50: #f5f7fb;
+  --slate-100: #eceff6;
+  --slate-200: #e0e5ef;
+  --slate-300: #c6cede;
+  --slate-400: #93a0b8;
+  --slate-500: #667790;
+  --slate-600: #4a5a73;
+  --slate-700: #33405a;
+  --slate-800: #1f2a41;
+  --slate-900: #101a2e;
+
+  --brand-50: #eff4ff;
+  --brand-100: #dde7ff;
+  --brand-200: #c3d4ff;
+  --brand-300: #9db6fd;
+  --brand-400: #6d8ff9;
+  --brand-500: #3b68f0;
+  --brand-600: #2a4fd4;
+  --brand-700: #2340a8;
+  --brand-800: #1f3785;
+  --brand-900: #1b2f6b;
+
+  --overlay: rgba(16, 26, 46, 0.45);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --surface: #131a2b;
+
+  --slate-50: #0a0f1c;
+  --slate-100: #1b2337;
+  --slate-200: #27314a;
+  --slate-300: #3a4560;
+  --slate-400: #7b89a6;
+  --slate-500: #9aa8c4;
+  --slate-600: #bfcade;
+  --slate-700: #dbe3f1;
+  --slate-800: #eaeff8;
+  --slate-900: #f7f9fd;
+
+  --brand-50: #1d2a4d;
+  --brand-100: #24365e;
+  --brand-200: #2f4780;
+  --brand-300: #4463ad;
+  --brand-400: #6b8bea;
+  --brand-500: #5a7cf0;
+  --brand-600: #4a6df0;
+  --brand-700: #a8bcff;
+  --brand-800: #c9d6ff;
+  --brand-900: #e2e9ff;
+
+  --overlay: rgba(3, 7, 18, 0.65);
 }
 
 body {
-  @apply bg-slate-50 text-slate-800 antialiased;
+  @apply bg-slate-50 bg-page-glow text-slate-700 antialiased;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+::selection {
+  background: var(--brand-200);
+  color: var(--slate-900);
+}
+
+@layer base {
+  * {
+    scrollbar-color: var(--slate-300) transparent;
+    scrollbar-width: thin;
+  }
+  ::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--slate-300);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--slate-400);
+  }
 }
 
 @layer components {
   .card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+    @apply rounded-2xl border border-slate-200 bg-white shadow-soft;
+  }
+  .card-glass {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-soft backdrop-blur;
   }
   .input {
-    @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-slate-100;
+    @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 disabled:bg-slate-100 disabled:text-slate-500;
   }
   .label {
     @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-60;
   }
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700;
+    @apply btn bg-brand-600 text-white shadow-soft hover:bg-brand-700 active:translate-y-px;
   }
   .btn-secondary {
-    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+    @apply btn border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-100 active:translate-y-px;
+  }
+  .btn-ghost {
+    @apply btn text-slate-600 hover:bg-slate-100;
   }
   .btn-danger {
-    @apply btn bg-rose-600 text-white hover:bg-rose-700;
+    @apply btn bg-rose-600 text-white shadow-soft hover:bg-rose-700 active:translate-y-px;
   }
   .table-cell {
-    @apply px-3 py-2 text-sm;
+    @apply px-3 py-2.5 text-sm text-slate-700;
+  }
+  .surface-muted {
+    @apply rounded-xl border border-slate-200 bg-slate-50 p-3;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600;
   }
 }

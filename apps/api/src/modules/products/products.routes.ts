@@ -29,6 +29,15 @@ const PRODUCT_TYPES = [
   'BUNDLE',
 ] as const;
 
+/** Accepts an absolute URL or a path served by the local `/uploads` mount. */
+const imageReference = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((value) => /^https?:\/\//.test(value) || value.startsWith('/uploads/'), {
+    message: 'Image must be an absolute URL or an uploaded file path.',
+  });
+
 const createSchema = z.object({
   name: z.string().trim().min(1).max(200),
   sku: z.string().trim().min(1).max(60),
@@ -47,7 +56,7 @@ const createSchema = z.object({
   trackBatches: z.boolean().default(false),
   isPerishable: z.boolean().default(false),
   shelfLifeDays: z.coerce.number().int().positive().nullable().optional(),
-  imageUrl: z.string().url().nullable().optional(),
+  imageUrl: imageReference.nullable().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']).optional(),
 });
 

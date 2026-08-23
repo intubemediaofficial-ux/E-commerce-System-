@@ -4,14 +4,26 @@ export interface NavItem {
   permission?: string;
 }
 
+export type NavIcon =
+  | 'overview'
+  | 'catalogue'
+  | 'inventory'
+  | 'purchasing'
+  | 'restaurant'
+  | 'ecommerce'
+  | 'insights'
+  | 'administration';
+
 export interface NavSection {
   title: string;
+  icon: NavIcon;
   items: NavItem[];
 }
 
 export const NAVIGATION: NavSection[] = [
   {
     title: 'Overview',
+    icon: 'overview',
     items: [
       { href: '/dashboard', label: 'Admin dashboard', permission: 'report.view' },
       { href: '/dashboard/inventory', label: 'Inventory dashboard', permission: 'inventory.view' },
@@ -21,6 +33,7 @@ export const NAVIGATION: NavSection[] = [
   },
   {
     title: 'Catalogue',
+    icon: 'catalogue',
     items: [
       { href: '/products', label: 'Products', permission: 'product.view' },
       { href: '/products/scan', label: 'Scan lookup', permission: 'product.view' },
@@ -31,6 +44,7 @@ export const NAVIGATION: NavSection[] = [
   },
   {
     title: 'Inventory',
+    icon: 'inventory',
     items: [
       { href: '/inventory', label: 'Stock on hand', permission: 'inventory.view' },
       { href: '/inventory/ledger', label: 'Stock ledger', permission: 'inventory.view' },
@@ -43,6 +57,7 @@ export const NAVIGATION: NavSection[] = [
   },
   {
     title: 'Purchasing',
+    icon: 'purchasing',
     items: [
       { href: '/suppliers', label: 'Suppliers', permission: 'supplier.view' },
       { href: '/purchase-orders', label: 'Purchase orders', permission: 'purchase.view' },
@@ -52,6 +67,7 @@ export const NAVIGATION: NavSection[] = [
   },
   {
     title: 'Restaurant',
+    icon: 'restaurant',
     items: [
       { href: '/recipes', label: 'Recipes', permission: 'recipe.view' },
       { href: '/restaurant/orders', label: 'Kitchen orders', permission: 'restaurant.order.view' },
@@ -61,6 +77,7 @@ export const NAVIGATION: NavSection[] = [
   },
   {
     title: 'E-commerce',
+    icon: 'ecommerce',
     items: [
       { href: '/ecommerce/orders', label: 'Orders', permission: 'ecommerce.order.view' },
       { href: '/ecommerce/reservations', label: 'Reservations', permission: 'ecommerce.order.view' },
@@ -69,10 +86,12 @@ export const NAVIGATION: NavSection[] = [
   },
   {
     title: 'Insights',
+    icon: 'insights',
     items: [{ href: '/reports', label: 'Reports & exports', permission: 'report.view' }],
   },
   {
     title: 'Administration',
+    icon: 'administration',
     items: [
       { href: '/admin/users', label: 'Users', permission: 'user.manage' },
       { href: '/admin/roles', label: 'Roles & permissions', permission: 'role.manage' },
