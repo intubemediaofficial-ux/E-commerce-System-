@@ -12,6 +12,7 @@
 | `JWT_REFRESH_TTL` | no | Refresh token lifetime, default `30d`. |
 | `PORT` | no | API port, default `4000`. |
 | `NODE_ENV` | no | `development` / `production`. |
+| `SEED_PASSWORD` | production seed only | Strong private password required when explicitly loading demo data in production. |
 | `CORS_ORIGINS` | no | Comma-separated allowed origins for the browser app. |
 | `LOG_LEVEL` | no | Pino level, default `info`. |
 | `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | no | API rate limiting window and cap. |
@@ -32,6 +33,10 @@ npm run db:seed --workspace=api           # development/demo data only
 
 Migrations are checked into `apps/api/prisma/migrations` and must be applied before the API
 starts. The Compose `api` service runs `prisma migrate deploy` on boot.
+
+The seed creates predictable demo accounts and must not use its development password in production.
+If production demo data is explicitly required, set `NODE_ENV=production` and a strong, private
+`SEED_PASSWORD` before running the seed. The seed refuses to run in production without it.
 
 ## Processes
 
