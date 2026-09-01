@@ -37,7 +37,7 @@ export default function LoginPage() {
       <div className="card w-full max-w-md p-6">
         <h1 className="text-xl font-semibold text-slate-900">Inventory Management</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Sign in to manage stock, purchasing, kitchen and e-commerce operations.
+          Sign in to manage products, stock, purchasing and e-commerce orders.
         </p>
 
         <form className="mt-6 space-y-4" onSubmit={submit}>

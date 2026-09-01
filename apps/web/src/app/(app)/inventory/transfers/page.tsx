@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { post } from '@/lib/api';
 import { dateTime, qty } from '@/lib/format';
 import { useAuth } from '@/components/AuthProvider';
 import { useList, useListState } from '@/hooks/useList';
+import { useStockRefresh } from '@/hooks/useStockRefresh';
 import { useWarehouseOptions } from '@/hooks/useOptions';
 import { ProductPicker } from '@/components/ProductPicker';
 import { SelectFilter, Toolbar } from '@/components/Toolbar';
@@ -53,7 +54,7 @@ export default function TransfersPage() {
   const canTransfer = can('inventory.transfer');
   const state = useListState();
   const list = useList<TransferRow>('/api/stock-transfers', state);
-  const queryClient = useQueryClient();
+  const invalidate = useStockRefresh();
   const { options: warehouses } = useWarehouseOptions();
 
   const [open, setOpen] = useState(false);
@@ -65,9 +66,6 @@ export default function TransfersPage() {
   const [receiveLines, setReceiveLines] = useState<Record<string, string>>({});
   const [error, setError] = useState<unknown>(null);
 
-  const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ['/api/stock-transfers'] });
-  };
 
   const create = useMutation({
     mutationFn: async () =>
@@ -137,7 +135,7 @@ export default function TransfersPage() {
     <>
       <PageHeader
         title="Stock transfers"
-        subtitle="Move stock between warehouses and kitchens with paired ledger entries"
+        subtitle="Move stock between warehouses and stores with paired ledger entries"
         actions={
           canTransfer ? (
             <button type="button" className="btn-primary" onClick={() => setOpen(true)}>

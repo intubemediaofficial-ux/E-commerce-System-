@@ -37,14 +37,6 @@ const REPORTS: { group: string; items: { slug: string; label: string }[] }[] = [
     ],
   },
   {
-    group: 'Restaurant',
-    items: [
-      { slug: 'consumption', label: 'Ingredient consumption' },
-      { slug: 'food-cost', label: 'Food cost' },
-      { slug: 'recipe-cost', label: 'Recipe cost' },
-    ],
-  },
-  {
     group: 'Sales & audit',
     items: [
       { slug: 'sales', label: 'E-commerce sales' },

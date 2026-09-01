@@ -45,13 +45,20 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === 'P2002') {
-      const target = Array.isArray(err.meta?.target) ? (err.meta?.target as string[]).join(', ') : 'field';
-      const isSku = String(target).includes('sku');
+      // Scoping columns are implementation detail; only report the fields a user typed.
+      const columns = (Array.isArray(err.meta?.target) ? (err.meta?.target as string[]) : []).filter(
+        (column) => !['organizationId', 'productId'].includes(column),
+      );
+      const fields = columns.length ? columns : ['field'];
       return res.status(409).json({
         success: false,
         error: {
-          code: isSku ? 'DUPLICATE_SKU' : 'CONFLICT',
-          message: `A record with the same ${target} already exists.`,
+          code: fields.includes('sku') ? 'DUPLICATE_SKU' : 'CONFLICT',
+          message: `A record with the same ${fields.join(', ')} already exists.`,
+          details: columns.map((column) => ({
+            path: column,
+            message: `This ${column} is already in use.`,
+          })),
         },
       });
     }

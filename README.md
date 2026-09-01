@@ -1,7 +1,7 @@
-# Inventory Management System (E-commerce + Restaurant)
+# E-commerce Inventory Management System
 
-Multi-tenant inventory platform with a ledger-backed stock core, restaurant recipe
-consumption and e-commerce reservation/fulfilment flows.
+Multi-tenant e-commerce inventory platform with a ledger-backed stock core, purchasing
+workflows and order reservation/fulfilment flows.
 
 - `apps/api` — Express + TypeScript REST API, Prisma/PostgreSQL, Redis + BullMQ jobs, Swagger docs
 - `apps/web` — Next.js 14 App Router frontend (TanStack Query, Tailwind), fully responsive
@@ -41,8 +41,7 @@ Seed logins (development data only):
 | Super admin | superadmin@demo.test | Admin@12345 |
 | Admin (full access) | admin@demo.test | Admin@12345 |
 
-Other seeded users cover inventory manager, purchase manager, restaurant manager, kitchen staff,
-sales manager and accountant roles.
+Other seeded users cover inventory manager, purchase manager, sales manager and accountant roles.
 
 ## Verification
 
@@ -77,9 +76,8 @@ worker and the frontend.
 | Master data | organizations, locations, warehouses, categories, brands, units + conversions, products, variants, bundles, suppliers |
 | Inventory | stock, immutable ledger, batches/expiry, adjustments (with high-value approval), transfers, wastage, opening-stock CSV import, barcode/SKU lookup |
 | Purchasing | purchase orders with approval workflow, partial goods receipts with batch capture, purchase returns, supplier price history |
-| Restaurant | recipes/BOM with yield + wastage %, recipe costing, kitchen orders, automatic ingredient consumption, manual consumption, food cost |
 | E-commerce | orders, reservations with TTL, bundle expansion, pack/ship/complete/cancel, validated returns |
-| Analytics | admin/inventory/restaurant/e-commerce dashboards, 20 reports with JSON/CSV/Excel/PDF export |
+| Analytics | admin/inventory/e-commerce dashboards, 20 reports with JSON/CSV/Excel/PDF export |
 | Notifications | low stock, out of stock, expiry, large wastage; in-app + email, recurring BullMQ jobs |
 | Audit | immutable audit log with actor, IP, user agent and before/after values |
 

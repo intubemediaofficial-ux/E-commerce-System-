@@ -151,16 +151,29 @@ export function Field({
   label,
   children,
   hint,
+  required,
+  error,
 }: {
   label: string;
   children: ReactNode;
   hint?: string;
+  required?: boolean;
+  error?: string;
 }) {
   return (
-    <label className="block">
-      <span className="label">{label}</span>
+    <label className={`block${error ? ' field-invalid' : ''}`}>
+      <span className="label">
+        {label}
+        {required ? <span className="ml-1 text-rose-500">*</span> : null}
+      </span>
       {children}
-      {hint ? <span className="mt-1 block text-xs text-slate-400">{hint}</span> : null}
+      {error ? (
+        <span role="alert" className="mt-1 block text-xs font-medium text-rose-600">
+          {error}
+        </span>
+      ) : hint ? (
+        <span className="mt-1 block text-xs text-slate-400">{hint}</span>
+      ) : null}
     </label>
   );
 }

@@ -14,7 +14,6 @@ interface WarehouseRow extends Warehouse {
 const WAREHOUSE_TYPES = [
   'MAIN_WAREHOUSE',
   'BRANCH_WAREHOUSE',
-  'RESTAURANT_KITCHEN',
   'COLD_STORAGE',
   'PACKAGING_STORE',
   'RETAIL_STORE',
@@ -27,7 +26,7 @@ export default function WarehousesPage() {
   return (
     <CrudPage<WarehouseRow>
       title="Warehouses"
-      subtitle="Stores, kitchens and cold rooms holding stock"
+      subtitle="Warehouses, stores and cold rooms holding stock"
       path="/api/warehouses"
       canManage={can('warehouse.manage')}
       columns={[

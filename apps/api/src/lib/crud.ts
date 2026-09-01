@@ -1,13 +1,13 @@
-import { Router } from 'express';
-import { ZodTypeAny, z } from 'zod';
-import { created, ok, pageMeta } from './http';
-import { notFound } from './errors';
-import { orderBy, paginationSchema, skipTake, uuidParam } from './query';
-import { validate } from '../middleware/validate';
-import { asyncHandler } from '../middleware/asyncHandler';
-import { orgId, requirePermission } from '../middleware/auth';
-import { auditFromRequest } from '../services/audit.service';
-import type { Permission } from '../auth/permissions';
+import { Router } from "express";
+import { ZodTypeAny, z } from "zod";
+import { created, ok, pageMeta } from "./http";
+import { badRequest, notFound } from "./errors";
+import { orderBy, paginationSchema, skipTake, uuidParam } from "./query";
+import { validate } from "../middleware/validate";
+import { asyncHandler } from "../middleware/asyncHandler";
+import { orgId, requirePermission } from "../middleware/auth";
+import { auditFromRequest } from "../services/audit.service";
+import type { Permission } from "../auth/permissions";
 
 /**
  * Minimal surface of a Prisma model delegate. Concrete delegates are passed in
@@ -16,7 +16,9 @@ import type { Permission } from '../auth/permissions';
 export interface CrudDelegate {
   findMany(args: Record<string, unknown>): Promise<unknown[]>;
   count(args: Record<string, unknown>): Promise<number>;
-  findFirst(args: Record<string, unknown>): Promise<Record<string, unknown> | null>;
+  findFirst(
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null>;
   create(args: Record<string, unknown>): Promise<Record<string, unknown>>;
   update(args: Record<string, unknown>): Promise<Record<string, unknown>>;
 }
@@ -42,19 +44,35 @@ export interface CrudOptions {
   archiveOnDelete?: boolean;
 }
 
+const statusFilter = {
+  status: z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]).optional(),
+};
+
 export function crudRouter(options: CrudOptions): Router {
   const router = Router();
-  const filterSchema = z.object(options.filters ?? {});
+  const updateSchema =
+    options.updateSchema ??
+    (options.createSchema instanceof z.ZodObject
+      ? (options.createSchema.partial() as ZodTypeAny)
+      : options.createSchema);
+  const filterSchema = z.object({
+    ...statusFilter,
+    ...(options.filters ?? {}),
+  });
   const querySchema = paginationSchema.merge(filterSchema);
 
   router.get(
-    '/',
+    "/",
     requirePermission(options.viewPermission),
     validate({ query: querySchema }),
     asyncHandler(async (req, res) => {
-      const q = req.query as unknown as z.infer<typeof paginationSchema> & Record<string, unknown>;
+      const q = req.query as unknown as z.infer<typeof paginationSchema> &
+        Record<string, unknown>;
       const filters: Record<string, unknown> = {};
-      for (const key of Object.keys(options.filters ?? {})) {
+      for (const key of Object.keys({
+        ...statusFilter,
+        ...(options.filters ?? {}),
+      })) {
         if (q[key] !== undefined) filters[key] = q[key];
       }
       const search = q.search;
@@ -64,7 +82,7 @@ export function crudRouter(options: CrudOptions): Router {
         ...(search && options.searchFields?.length
           ? {
               OR: options.searchFields.map((field) => ({
-                [field]: { contains: search, mode: 'insensitive' },
+                [field]: { contains: search, mode: "insensitive" },
               })),
             }
           : {}),
@@ -83,7 +101,7 @@ export function crudRouter(options: CrudOptions): Router {
   );
 
   router.get(
-    '/:id',
+    "/:id",
     requirePermission(options.viewPermission),
     validate({ params: uuidParam }),
     asyncHandler(async (req, res) => {
@@ -91,13 +109,13 @@ export function crudRouter(options: CrudOptions): Router {
         where: { id: req.params.id, organizationId: orgId(req) },
         ...(options.include ? { include: options.include } : {}),
       });
-      if (!row) throw notFound('NOT_FOUND', `${options.entity} not found.`);
+      if (!row) throw notFound("NOT_FOUND", `${options.entity} not found.`);
       return ok(res, row);
     }),
   );
 
   router.post(
-    '/',
+    "/",
     requirePermission(options.managePermission),
     validate({ body: options.createSchema }),
     asyncHandler(async (req, res) => {
@@ -116,15 +134,19 @@ export function crudRouter(options: CrudOptions): Router {
   );
 
   router.put(
-    '/:id',
+    "/:id",
     requirePermission(options.managePermission),
-    validate({ params: uuidParam, body: options.updateSchema ?? options.createSchema }),
+    validate({ params: uuidParam, body: updateSchema }),
     asyncHandler(async (req, res) => {
       const existing = await options.delegate.findFirst({
         where: { id: req.params.id, organizationId: orgId(req) },
       });
-      if (!existing) throw notFound('NOT_FOUND', `${options.entity} not found.`);
-      const row = await options.delegate.update({ where: { id: existing.id }, data: req.body });
+      if (!existing)
+        throw notFound("NOT_FOUND", `${options.entity} not found.`);
+      const row = await options.delegate.update({
+        where: { id: existing.id },
+        data: req.body,
+      });
       await auditFromRequest(req, {
         action: `${options.entity.toUpperCase()}_UPDATED`,
         module: options.module,
@@ -137,18 +159,52 @@ export function crudRouter(options: CrudOptions): Router {
     }),
   );
 
-  router.delete(
-    '/:id',
+  /** Restores an archived record so it becomes selectable again. */
+  router.post(
+    "/:id/restore",
     requirePermission(options.managePermission),
     validate({ params: uuidParam }),
     asyncHandler(async (req, res) => {
       const existing = await options.delegate.findFirst({
         where: { id: req.params.id, organizationId: orgId(req) },
       });
-      if (!existing) throw notFound('NOT_FOUND', `${options.entity} not found.`);
+      if (!existing)
+        throw notFound("NOT_FOUND", `${options.entity} not found.`);
+      if (existing.status !== "ARCHIVED") {
+        throw badRequest(
+          "VALIDATION_ERROR",
+          `Only archived ${options.entity.toLowerCase()}s can be restored.`,
+        );
+      }
       const row = await options.delegate.update({
         where: { id: existing.id },
-        data: { status: 'ARCHIVED' },
+        data: { status: "ACTIVE" },
+      });
+      await auditFromRequest(req, {
+        action: `${options.entity.toUpperCase()}_RESTORED`,
+        module: options.module,
+        entityType: options.entity,
+        entityId: String(row.id),
+        oldValue: existing,
+        newValue: row,
+      });
+      return ok(res, row);
+    }),
+  );
+
+  router.delete(
+    "/:id",
+    requirePermission(options.managePermission),
+    validate({ params: uuidParam }),
+    asyncHandler(async (req, res) => {
+      const existing = await options.delegate.findFirst({
+        where: { id: req.params.id, organizationId: orgId(req) },
+      });
+      if (!existing)
+        throw notFound("NOT_FOUND", `${options.entity} not found.`);
+      const row = await options.delegate.update({
+        where: { id: existing.id },
+        data: { status: "ARCHIVED" },
       });
       await auditFromRequest(req, {
         action: `${options.entity.toUpperCase()}_ARCHIVED`,

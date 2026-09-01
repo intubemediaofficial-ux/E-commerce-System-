@@ -6,7 +6,6 @@ const PATHS: Record<NavIcon, string> = {
   catalogue: 'M4 7l8-4 8 4-8 4-8-4Zm0 5l8 4 8-4M4 17l8 4 8-4',
   inventory: 'M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Zm2-4h14l2 4H3l2-4Zm4 8h6',
   purchasing: 'M3 4h2l2.4 11.2A2 2 0 0 0 9.36 17h8.28a2 2 0 0 0 1.96-1.6L21 8H6M9 21h.01M17 21h.01',
-  restaurant: 'M6 3v8a3 3 0 0 0 6 0V3M9 11v10M17 3c-1.5 2-2 3.5-2 5s.5 3 2 3 2-1.5 2-3-.5-3-2-5Zm0 8v10',
   ecommerce: 'M4 6h16l-1.5 9.5A2 2 0 0 1 16.5 17h-9a2 2 0 0 1-2-1.5L4 6Zm4 0a4 4 0 0 1 8 0M9 21h.01M16 21h.01',
   insights: 'M4 20V10m5 10V4m5 16v-7m5 7V7',
   administration:

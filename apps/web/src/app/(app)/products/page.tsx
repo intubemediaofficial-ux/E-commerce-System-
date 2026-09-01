@@ -1,12 +1,13 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 import { assetUrl, download, post, del } from '@/lib/api';
-import { money, qty, titleCase } from '@/lib/format';
+import { money, qty, stockTotals, titleCase } from '@/lib/format';
 import { useAuth } from '@/components/AuthProvider';
 import { useList, useListState } from '@/hooks/useList';
+import { useStockRefresh } from '@/hooks/useStockRefresh';
 import { useCategoryOptions } from '@/hooks/useOptions';
 import { SelectFilter, Toolbar } from '@/components/Toolbar';
 import { PRODUCT_TYPES, ProductFormModal } from '@/components/ProductFormModal';
@@ -30,7 +31,7 @@ export default function ProductsPage() {
   const canManage = can('product.create') || can('product.update');
   const state = useListState();
   const list = useList<Product>('/api/products', state);
-  const queryClient = useQueryClient();
+  const invalidate = useStockRefresh();
   const { options: categories } = useCategoryOptions();
 
   const [editing, setEditing] = useState<Product | null>(null);
@@ -40,12 +41,14 @@ export default function ProductsPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<unknown>(null);
 
-  const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ['/api/products'] });
-  };
-
   const archive = useMutation({
     mutationFn: async (id: string) => del(`/api/products/${id}`),
+    onSuccess: invalidate,
+    onError: setError,
+  });
+
+  const restore = useMutation({
+    mutationFn: async (id: string) => post(`/api/products/${id}/restore`),
     onSuccess: invalidate,
     onError: setError,
   });
@@ -63,7 +66,7 @@ export default function ProductsPage() {
     <>
       <PageHeader
         title="Products"
-        subtitle="Finished goods, raw materials, ingredients, packaging and bundles"
+        subtitle="Finished goods, packaging materials and bundles"
         actions={
           <>
             <Link className="btn-secondary" href="/products/scan">
@@ -159,6 +162,11 @@ export default function ProductsPage() {
                 { header: 'Category', cell: (row) => row.category?.name ?? '—' },
                 { header: 'Purchase', align: 'right', cell: (row) => money(row.purchasePrice) },
                 { header: 'Selling', align: 'right', cell: (row) => money(row.sellingPrice) },
+                {
+                  header: 'In stock',
+                  align: 'right',
+                  cell: (row) => <StockCell product={row} />,
+                },
                 { header: 'Reorder', align: 'right', cell: (row) => qty(row.reorderLevel) },
                 { header: 'Status', cell: (row) => <Badge value={row.status} /> },
                 ...(canManage
@@ -188,6 +196,16 @@ export default function ProductsPage() {
                                 message="Archive this product? Historical documents keep referencing it."
                                 onConfirm={() => archive.mutate(row.id)}
                               />
+                            ) : null}
+                            {can('product.update') && row.status === 'ARCHIVED' ? (
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                disabled={restore.isPending}
+                                onClick={() => restore.mutate(row.id)}
+                              >
+                                Unarchive
+                              </button>
                             ) : null}
                           </div>
                         ),
@@ -261,6 +279,19 @@ export default function ProductsPage() {
         ) : null}
       </Modal>
     </>
+  );
+}
+
+function StockCell({ product }: { product: Product }) {
+  const totals = stockTotals(product.stock);
+  const low = totals.available <= Number(product.reorderLevel ?? 0);
+  return (
+    <span className={low ? 'font-semibold text-amber-600' : 'font-medium text-slate-700'}>
+      {qty(totals.available)}
+      {totals.reserved > 0 ? (
+        <span className="ml-1 text-xs text-slate-400">({qty(totals.onHand)} on hand)</span>
+      ) : null}
+    </span>
   );
 }
 

@@ -7,12 +7,12 @@ import { titleCase } from '@/lib/format';
 import { useBrandOptions, useCategoryOptions, useUnitOptions } from '@/hooks/useOptions';
 import { ImageUploader } from '@/components/ImageUploader';
 import { ErrorState, Field, Modal } from '@/components/ui';
+import { FieldErrors, fieldErrorsFromApi, requiredNumber, requiredText } from '@/lib/forms';
 import type { Product } from '@/lib/types';
 
 export const PRODUCT_TYPES = [
   'FINISHED_PRODUCT',
   'RAW_MATERIAL',
-  'INGREDIENT',
   'PACKAGING_MATERIAL',
   'SERVICE',
   'BUNDLE',
@@ -77,6 +77,41 @@ function fromProduct(product: Product): FormState {
   };
 }
 
+const FIELD_NAMES = [
+  'name',
+  'sku',
+  'barcode',
+  'unitId',
+  'categoryId',
+  'brandId',
+  'purchasePrice',
+  'sellingPrice',
+  'taxRate',
+  'reorderLevel',
+  'minimumStockLevel',
+];
+
+/** Client-side checks so the user sees the offending field before a round trip. */
+function validateForm(form: FormState): FieldErrors {
+  const errors: FieldErrors = {};
+  const set = (field: string, message: string | null) => {
+    if (message) errors[field] = message;
+  };
+
+  set('name', requiredText(form.name, 'Name'));
+  set('sku', requiredText(form.sku, 'SKU'));
+  if (!errors.sku && !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(form.sku.trim())) {
+    errors.sku = 'Please enter a valid SKU (letters, numbers, . _ / - only).';
+  }
+  set('unitId', form.unitId ? null : 'Unit is required.');
+  set('purchasePrice', requiredNumber(form.purchasePrice, 'Purchase price'));
+  set('sellingPrice', requiredNumber(form.sellingPrice, 'Selling price'));
+  set('taxRate', requiredNumber(form.taxRate, 'Tax rate'));
+  set('reorderLevel', requiredNumber(form.reorderLevel, 'Reorder level'));
+  set('minimumStockLevel', requiredNumber(form.minimumStockLevel, 'Minimum stock level'));
+  return errors;
+}
+
 /** Create/edit form shared by the product list and the product detail page. */
 export function ProductFormModal({
   open,
@@ -94,12 +129,34 @@ export function ProductFormModal({
   const { options: brands } = useBrandOptions();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<unknown>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setFieldErrors({});
     setForm(product ? fromProduct(product) : EMPTY_FORM);
   }, [open, product]);
+
+  const update = (patch: Partial<FormState>) => {
+    setForm((current) => ({ ...current, ...patch }));
+    setFieldErrors((current) => {
+      const next = { ...current };
+      for (const key of Object.keys(patch)) delete next[key];
+      return next;
+    });
+  };
+
+  const submit = () => {
+    const errors = validateForm(form);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setError(new Error('Please fix the highlighted fields before saving.'));
+      return;
+    }
+    setError(null);
+    save.mutate();
+  };
 
   const save = useMutation({
     mutationFn: async (): Promise<void> => {
@@ -127,10 +184,14 @@ export function ProductFormModal({
     },
     onSuccess: () => {
       setError(null);
+      setFieldErrors({});
       onSaved();
       onClose();
     },
-    onError: setError,
+    onError: (err: unknown) => {
+      setFieldErrors(fieldErrorsFromApi(err, FIELD_NAMES));
+      setError(err);
+    },
   });
 
   return (
@@ -147,7 +208,7 @@ export function ProductFormModal({
             type="button"
             className="btn-primary"
             disabled={save.isPending}
-            onClick={() => save.mutate()}
+            onClick={submit}
           >
             {save.isPending ? 'Saving…' : 'Save product'}
           </button>
@@ -162,32 +223,32 @@ export function ProductFormModal({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Name">
+        <Field label="Name" required error={fieldErrors.name}>
           <input
             className="input"
             value={form.name}
-            onChange={(event) => setForm({ ...form, name: event.target.value })}
+            onChange={(event) => update({ name: event.target.value })}
           />
         </Field>
-        <Field label="SKU" hint="Unique within the organization">
+        <Field label="SKU" required hint="Unique within the organization" error={fieldErrors.sku}>
           <input
             className="input"
             value={form.sku}
-            onChange={(event) => setForm({ ...form, sku: event.target.value })}
+            onChange={(event) => update({ sku: event.target.value })}
           />
         </Field>
-        <Field label="Barcode" hint="Scan directly into this field">
+        <Field label="Barcode" hint="Scan directly into this field" error={fieldErrors.barcode}>
           <input
             className="input"
             value={form.barcode}
-            onChange={(event) => setForm({ ...form, barcode: event.target.value })}
+            onChange={(event) => update({ barcode: event.target.value })}
           />
         </Field>
         <Field label="Product type">
           <select
             className="input"
             value={form.productType}
-            onChange={(event) => setForm({ ...form, productType: event.target.value })}
+            onChange={(event) => update({ productType: event.target.value })}
           >
             {PRODUCT_TYPES.map((type) => (
               <option key={type} value={type}>
@@ -196,11 +257,11 @@ export function ProductFormModal({
             ))}
           </select>
         </Field>
-        <Field label="Unit">
+        <Field label="Unit" required error={fieldErrors.unitId}>
           <select
             className="input"
             value={form.unitId}
-            onChange={(event) => setForm({ ...form, unitId: event.target.value })}
+            onChange={(event) => update({ unitId: event.target.value })}
           >
             <option value="">Select…</option>
             {units.map((unit) => (
@@ -214,7 +275,7 @@ export function ProductFormModal({
           <select
             className="input"
             value={form.categoryId}
-            onChange={(event) => setForm({ ...form, categoryId: event.target.value })}
+            onChange={(event) => update({ categoryId: event.target.value })}
           >
             <option value="">None</option>
             {categories.map((category) => (
@@ -228,7 +289,7 @@ export function ProductFormModal({
           <select
             className="input"
             value={form.brandId}
-            onChange={(event) => setForm({ ...form, brandId: event.target.value })}
+            onChange={(event) => update({ brandId: event.target.value })}
           >
             <option value="">None</option>
             {brands.map((brand) => (
@@ -238,49 +299,49 @@ export function ProductFormModal({
             ))}
           </select>
         </Field>
-        <Field label="Purchase price">
+        <Field label="Purchase price" required error={fieldErrors.purchasePrice}>
           <input
             className="input"
             type="number"
             step="any"
             value={form.purchasePrice}
-            onChange={(event) => setForm({ ...form, purchasePrice: event.target.value })}
+            onChange={(event) => update({ purchasePrice: event.target.value })}
           />
         </Field>
-        <Field label="Selling price">
+        <Field label="Selling price" required error={fieldErrors.sellingPrice}>
           <input
             className="input"
             type="number"
             step="any"
             value={form.sellingPrice}
-            onChange={(event) => setForm({ ...form, sellingPrice: event.target.value })}
+            onChange={(event) => update({ sellingPrice: event.target.value })}
           />
         </Field>
-        <Field label="Tax rate %">
+        <Field label="Tax rate %" error={fieldErrors.taxRate}>
           <input
             className="input"
             type="number"
             step="any"
             value={form.taxRate}
-            onChange={(event) => setForm({ ...form, taxRate: event.target.value })}
+            onChange={(event) => update({ taxRate: event.target.value })}
           />
         </Field>
-        <Field label="Reorder level">
+        <Field label="Reorder level" error={fieldErrors.reorderLevel}>
           <input
             className="input"
             type="number"
             step="any"
             value={form.reorderLevel}
-            onChange={(event) => setForm({ ...form, reorderLevel: event.target.value })}
+            onChange={(event) => update({ reorderLevel: event.target.value })}
           />
         </Field>
-        <Field label="Minimum stock level">
+        <Field label="Minimum stock level" error={fieldErrors.minimumStockLevel}>
           <input
             className="input"
             type="number"
             step="any"
             value={form.minimumStockLevel}
-            onChange={(event) => setForm({ ...form, minimumStockLevel: event.target.value })}
+            onChange={(event) => update({ minimumStockLevel: event.target.value })}
           />
         </Field>
         <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -288,7 +349,7 @@ export function ProductFormModal({
             type="checkbox"
             className="h-4 w-4"
             checked={form.trackBatches}
-            onChange={(event) => setForm({ ...form, trackBatches: event.target.checked })}
+            onChange={(event) => update({ trackBatches: event.target.checked })}
           />
           Track batches
         </label>
@@ -297,7 +358,7 @@ export function ProductFormModal({
             type="checkbox"
             className="h-4 w-4"
             checked={form.isPerishable}
-            onChange={(event) => setForm({ ...form, isPerishable: event.target.checked })}
+            onChange={(event) => update({ isPerishable: event.target.checked })}
           />
           Perishable (FEFO consumption)
         </label>
@@ -307,7 +368,7 @@ export function ProductFormModal({
               className="input"
               rows={3}
               value={form.description}
-              onChange={(event) => setForm({ ...form, description: event.target.value })}
+              onChange={(event) => update({ description: event.target.value })}
             />
           </Field>
         </div>

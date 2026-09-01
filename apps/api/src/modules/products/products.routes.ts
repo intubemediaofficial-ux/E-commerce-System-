@@ -120,6 +120,24 @@ const listQuery = paginationSchema.extend({
   status: z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']).optional(),
 });
 
+/** How many matches are ranked before paging a search result. */
+const RELEVANCE_POOL = 200;
+
+function relevanceRank(
+  product: { name: string; sku: string; barcode: string | null },
+  term: string,
+): number {
+  const needle = term.toLowerCase();
+  const name = product.name.toLowerCase();
+  const sku = product.sku.toLowerCase();
+  if (name === needle || sku === needle) return 0;
+  if (name.startsWith(needle)) return 1;
+  if (sku.startsWith(needle) || product.barcode?.toLowerCase().startsWith(needle)) return 2;
+  if (name.split(/[\s-]+/).some((word) => word.startsWith(needle))) return 3;
+  if (name.includes(needle)) return 4;
+  return 5;
+}
+
 router.get(
   '/',
   requirePermission('product.view'),
@@ -142,17 +160,35 @@ router.get(
           }
         : {}),
     };
+    const include = {
+      category: { select: { id: true, name: true } },
+      brand: { select: { id: true, name: true } },
+      unit: { select: { id: true, code: true, name: true } },
+      stock: { select: { warehouseId: true, quantity: true, reservedQuantity: true } },
+    };
+
+    // Free-text search is ranked by relevance (prefix beats mid-word match) so a
+    // partial term such as "iph" lists the closest products first.
+    if (q.search) {
+      const term = q.search.trim();
+      const [candidates, total] = await Promise.all([
+        prisma.product.findMany({ where, take: RELEVANCE_POOL, orderBy: { name: 'asc' }, include }),
+        prisma.product.count({ where }),
+      ]);
+      const ranked = candidates
+        .map((row, index) => ({ row, rank: relevanceRank(row, term), index }))
+        .sort((a, b) => a.rank - b.rank || a.index - b.index)
+        .map((entry) => entry.row);
+      const start = (q.page - 1) * q.perPage;
+      return ok(res, ranked.slice(start, start + q.perPage), pageMeta(q.page, q.perPage, total));
+    }
+
     const [rows, total] = await Promise.all([
       prisma.product.findMany({
         where,
         ...skipTake(q),
         orderBy: orderBy(q, SORTABLE, 'name'),
-        include: {
-          category: { select: { id: true, name: true } },
-          brand: { select: { id: true, name: true } },
-          unit: { select: { id: true, code: true, name: true } },
-          stock: { select: { warehouseId: true, quantity: true, reservedQuantity: true } },
-        },
+        include,
       }),
       prisma.product.count({ where }),
     ]);
@@ -317,7 +353,6 @@ router.get(
         variants: true,
         stock: { include: { warehouse: { select: { id: true, name: true, type: true } } } },
         batches: { where: { quantity: { gt: 0 } }, orderBy: { expiryDate: 'asc' } },
-        recipes: { include: { items: true } },
       },
     });
     if (!product) throw notFound('PRODUCT_NOT_FOUND', 'Product not found.');
@@ -357,6 +392,35 @@ router.put(
     const product = await prisma.product.update({ where: { id: existing.id }, data: req.body });
     await auditFromRequest(req, {
       action: 'PRODUCT_UPDATED',
+      module: 'product',
+      entityType: 'Product',
+      entityId: product.id,
+      oldValue: existing,
+      newValue: product,
+    });
+    return ok(res, product);
+  }),
+);
+
+/** Brings an archived product back into the active catalogue. */
+router.post(
+  '/:id/restore',
+  requirePermission('product.update'),
+  validate({ params: uuidParam }),
+  asyncHandler(async (req, res) => {
+    const existing = await prisma.product.findFirst({
+      where: { id: req.params.id, organizationId: orgId(req) },
+    });
+    if (!existing) throw notFound('PRODUCT_NOT_FOUND', 'Product not found.');
+    if (existing.status !== 'ARCHIVED') {
+      throw badRequest('VALIDATION_ERROR', 'Only archived products can be restored.');
+    }
+    const product = await prisma.product.update({
+      where: { id: existing.id },
+      data: { status: 'ACTIVE' },
+    });
+    await auditFromRequest(req, {
+      action: 'PRODUCT_RESTORED',
       module: 'product',
       entityType: 'Product',
       entityId: product.id,

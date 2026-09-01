@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { post } from '@/lib/api';
 import { dateTime, money, qty, titleCase } from '@/lib/format';
 import { useAuth } from '@/components/AuthProvider';
 import { useList, useListState } from '@/hooks/useList';
+import { useStockRefresh } from '@/hooks/useStockRefresh';
 import { useWarehouseOptions } from '@/hooks/useOptions';
 import { ProductPicker } from '@/components/ProductPicker';
 import { SelectFilter, Toolbar } from '@/components/Toolbar';
@@ -46,7 +47,7 @@ export default function WastagePage() {
   const canRecord = can('inventory.wastage');
   const state = useListState();
   const list = useList<WastageRow>('/api/inventory/wastage/list', state);
-  const queryClient = useQueryClient();
+  const invalidate = useStockRefresh();
   const { options: warehouses } = useWarehouseOptions();
 
   const [open, setOpen] = useState(false);
@@ -76,7 +77,7 @@ export default function WastagePage() {
       setQuantity('');
       setNotes('');
       setError(null);
-      void queryClient.invalidateQueries({ queryKey: ['/api/inventory/wastage/list'] });
+      invalidate();
     },
     onError: setError,
   });

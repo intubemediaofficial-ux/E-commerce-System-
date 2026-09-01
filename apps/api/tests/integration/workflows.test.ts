@@ -13,7 +13,7 @@ import {
 
 let session: Session;
 let mainWarehouse: string;
-let kitchen: string;
+let storeWarehouse: string;
 let supplierId: string;
 
 const bearer = (): string => `Bearer ${session.token}`;
@@ -21,7 +21,7 @@ const bearer = (): string => `Bearer ${session.token}`;
 beforeAll(async () => {
   session = await login();
   mainWarehouse = await firstWarehouse(session.organizationId, 'JAI-MAIN');
-  kitchen = await firstWarehouse(session.organizationId, 'JAI-KIT');
+  storeWarehouse = await firstWarehouse(session.organizationId, 'JAI-STORE');
   const supplier = await prisma.supplier.findFirstOrThrow({
     where: { organizationId: session.organizationId },
     select: { id: true },
@@ -56,11 +56,11 @@ describe('authentication and authorization', () => {
     expect(catalog.every((permission) => granted.includes(permission))).toBe(true);
   });
 
-  it('denies a kitchen user access to admin user management', async () => {
-    const kitchenSession = await login('kitchen@demo.test');
+  it('denies an accountant access to admin user management', async () => {
+    const accountsSession = await login('accounts@demo.test');
     const response = await api()
       .get('/api/admin/users')
-      .set('Authorization', `Bearer ${kitchenSession.token}`)
+      .set('Authorization', `Bearer ${accountsSession.token}`)
       .expect(403);
     expect(response.body.error.code).toBe('FORBIDDEN');
   });
@@ -119,7 +119,7 @@ describe('products', () => {
 
 describe('purchase to stock workflow', () => {
   it('receives a purchase order partially and then fully', async () => {
-    const productId = await productBySku(session.organizationId, 'ING-BUN');
+    const productId = await productBySku(session.organizationId, 'MOB-IP15');
     const before = await stockQuantity(productId, mainWarehouse);
 
     const po = await api()
@@ -202,7 +202,7 @@ describe('adjustments, wastage and idempotency', () => {
   });
 
   it('routes a high-value adjustment to approval instead of moving stock', async () => {
-    const productId = await productBySku(session.organizationId, 'ING-PATTY');
+    const productId = await productBySku(session.organizationId, 'ACC-CBL20');
     const before = await stockQuantity(productId, mainWarehouse);
     const response = await api()
       .post('/api/inventory/adjust')
@@ -220,12 +220,22 @@ describe('adjustments, wastage and idempotency', () => {
   });
 
   it('deducts wastage exactly once for a repeated idempotency key', async () => {
-    const productId = await productBySku(session.organizationId, 'ING-CHEESE');
-    const before = await stockQuantity(productId, kitchen);
+    const productId = await productBySku(session.organizationId, 'MOB-SGA55');
+    // Top the store up first so repeated test runs never exhaust the seeded stock.
+    await api()
+      .post('/api/inventory/adjust')
+      .set('Authorization', bearer())
+      .send({
+        warehouseId: storeWarehouse,
+        reason: 'PHYSICAL_COUNT',
+        items: [{ productId, quantityChange: 20, unitCost: 1 }],
+      })
+      .expect(201);
+    const before = await stockQuantity(productId, storeWarehouse);
     const key = randomUUID();
     const body = {
       productId,
-      warehouseId: kitchen,
+      warehouseId: storeWarehouse,
       quantity: 5,
       reason: 'SPOILAGE',
       notes: 'integration test',
@@ -244,25 +254,35 @@ describe('adjustments, wastage and idempotency', () => {
       .send(body)
       .expect(201);
 
-    const after = await stockQuantity(productId, kitchen);
+    const after = await stockQuantity(productId, storeWarehouse);
     expect(before.quantity.minus(after.quantity).toNumber()).toBe(5);
   });
 });
 
 describe('stock transfer workflow', () => {
   it('moves stock from source to destination through the ledger', async () => {
-    const productId = await productBySku(session.organizationId, 'ING-TOMATO');
+    const productId = await productBySku(session.organizationId, 'PKG-BOX');
+    // Keep the source stocked so repeated test runs stay independent.
+    await api()
+      .post('/api/inventory/adjust')
+      .set('Authorization', bearer())
+      .send({
+        warehouseId: mainWarehouse,
+        reason: 'PHYSICAL_COUNT',
+        items: [{ productId, quantityChange: 50, unitCost: 1 }],
+      })
+      .expect(201);
     const sourceBefore = await stockQuantity(productId, mainWarehouse);
-    const destBefore = await stockQuantity(productId, kitchen);
+    const destBefore = await stockQuantity(productId, storeWarehouse);
 
     const transfer = await api()
       .post('/api/stock-transfers')
       .set('Authorization', bearer())
       .send({
         sourceWarehouseId: mainWarehouse,
-        destinationWarehouseId: kitchen,
+        destinationWarehouseId: storeWarehouse,
         submit: true,
-        items: [{ productId, quantity: 500 }],
+        items: [{ productId, quantity: 50 }],
       })
       .expect(201);
     const id = transfer.body.data.id as string;
@@ -274,12 +294,12 @@ describe('stock transfer workflow', () => {
       .expect(200);
 
     const dispatched = await stockQuantity(productId, mainWarehouse);
-    expect(sourceBefore.quantity.minus(dispatched.quantity).toNumber()).toBe(500);
+    expect(sourceBefore.quantity.minus(dispatched.quantity).toNumber()).toBe(50);
 
     await api().post(`/api/stock-transfers/${id}/receive`).set('Authorization', bearer()).expect(200);
 
-    const destAfter = await stockQuantity(productId, kitchen);
-    expect(destAfter.quantity.minus(destBefore.quantity).toNumber()).toBe(500);
+    const destAfter = await stockQuantity(productId, storeWarehouse);
+    expect(destAfter.quantity.minus(destBefore.quantity).toNumber()).toBe(50);
 
     const record = await prisma.stockTransfer.findUniqueOrThrow({ where: { id } });
     expect(record.status).toBe('COMPLETED');
@@ -395,82 +415,6 @@ describe('e-commerce reservation workflow', () => {
   });
 });
 
-describe('restaurant consumption workflow', () => {
-  it('consumes recipe ingredients once when an order is completed', async () => {
-    const menuProductId = await productBySku(session.organizationId, 'MENU-BURGER');
-    const bunId = await productBySku(session.organizationId, 'ING-BUN');
-    const recipe = await prisma.recipe.findFirstOrThrow({
-      where: { organizationId: session.organizationId, productId: menuProductId },
-      include: { items: true },
-    });
-    const bunLine = recipe.items.find((item) => item.ingredientProductId === bunId);
-    expect(bunLine).toBeDefined();
-
-    const bunBefore = await stockQuantity(bunId, kitchen);
-
-    const order = await api()
-      .post('/api/restaurant/orders')
-      .set('Authorization', bearer())
-      .send({
-        warehouseId: kitchen,
-        tableNumber: 'T-9',
-        items: [{ productId: menuProductId, quantity: 4 }],
-      })
-      .expect(201);
-    const orderId = order.body.data.id as string;
-
-    await api()
-      .post(`/api/restaurant/orders/${orderId}/status`)
-      .set('Authorization', bearer())
-      .send({ status: 'IN_KITCHEN' })
-      .expect(200);
-
-    const completed = await api()
-      .post(`/api/restaurant/orders/${orderId}/complete`)
-      .set('Authorization', bearer())
-      .expect(200);
-    expect(Number(completed.body.data.ingredientCost)).toBeGreaterThan(0);
-
-    const bunAfter = await stockQuantity(bunId, kitchen);
-    expect(bunBefore.quantity.minus(bunAfter.quantity).toNumber()).toBeGreaterThanOrEqual(4);
-
-    const again = await api()
-      .post(`/api/restaurant/orders/${orderId}/complete`)
-      .set('Authorization', bearer())
-      .expect(409);
-    expect(again.body.error.code).toBe('INVALID_STATE');
-
-    const ledger = await prisma.inventoryLedger.count({
-      where: { referenceType: 'RESTAURANT_ORDER', referenceId: orderId, productId: bunId },
-    });
-    expect(ledger).toBe(1);
-  });
-
-  it('records manual consumption and reports food cost', async () => {
-    const potatoId = await productBySku(session.organizationId, 'ING-POTATO');
-    const before = await stockQuantity(potatoId, kitchen);
-
-    await api()
-      .post('/api/restaurant/consumption')
-      .set('Authorization', bearer())
-      .send({
-        warehouseId: kitchen,
-        notes: 'manual prep',
-        items: [{ productId: potatoId, quantity: 250 }],
-      })
-      .expect(201);
-
-    const after = await stockQuantity(potatoId, kitchen);
-    expect(before.quantity.minus(after.quantity).toNumber()).toBe(250);
-
-    const report = await api()
-      .get('/api/reports/food-cost')
-      .set('Authorization', bearer())
-      .expect(200);
-    expect(report.body.data.rows).toBeDefined();
-  });
-});
-
 describe('reports and dashboards', () => {
   it('exposes the ledger as an immutable audit trail', async () => {
     const response = await api()
@@ -539,10 +483,10 @@ describe('bulk import, export and scan lookup', () => {
   it('resolves a SKU through the scanner lookup endpoint', async () => {
     const response = await api()
       .get('/api/products/lookup')
-      .query({ code: 'ING-PATTY' })
+      .query({ code: 'ACC-CBL20' })
       .set('Authorization', bearer())
       .expect(200);
-    expect(response.body.data.product.sku).toBe('ING-PATTY');
+    expect(response.body.data.product.sku).toBe('ACC-CBL20');
     expect(Array.isArray(response.body.data.product.stock)).toBe(true);
   });
 
@@ -563,7 +507,7 @@ describe('bulk import, export and scan lookup', () => {
       .expect(200);
     expect(response.headers['content-type']).toContain('text/csv');
     expect(response.text.split('\n')[0]).toContain('SKU');
-    expect(response.text).toContain('ING-PATTY');
+    expect(response.text).toContain('ACC-CBL20');
   });
 
   it('imports products from CSV and reports per-row errors', async () => {

@@ -4,7 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { del, post, put } from '@/lib/api';
 import { useList, useListState } from '@/hooks/useList';
-import { Toolbar } from '@/components/Toolbar';
+import { FieldErrors, fieldErrorsFromApi } from '@/lib/forms';
+import { SelectFilter, Toolbar } from '@/components/Toolbar';
 import {
   Badge,
   ColumnDef,
@@ -79,9 +80,46 @@ export function CrudPage<T extends { id: string; status?: string }>({
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<FormValues>({});
   const [error, setError] = useState<unknown>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const invalidate = (): void => {
     void queryClient.invalidateQueries({ queryKey: [path] });
+  };
+
+  const setValue = (name: string, value: string | boolean): void => {
+    setValues((current) => ({ ...current, [name]: value }));
+    setFieldErrors((current) => {
+      if (!current[name]) return current;
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+  };
+
+  const validate = (): FieldErrors => {
+    const errors: FieldErrors = {};
+    for (const field of fields) {
+      const value = values[field.name];
+      if (field.required && (value === undefined || String(value).trim() === '')) {
+        errors[field.name] = `${field.label} is required.`;
+        continue;
+      }
+      if (field.type === 'number' && value !== undefined && String(value).trim() !== '') {
+        if (Number.isNaN(Number(value))) errors[field.name] = `${field.label} must be a number.`;
+      }
+    }
+    return errors;
+  };
+
+  const submit = (): void => {
+    const errors = validate();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setError(new Error('Please fix the highlighted fields before saving.'));
+      return;
+    }
+    setError(null);
+    save.mutate();
   };
 
   const save = useMutation({
@@ -98,9 +136,13 @@ export function CrudPage<T extends { id: string; status?: string }>({
       setEditing(null);
       setValues({});
       setError(null);
+      setFieldErrors({});
       invalidate();
     },
-    onError: (caught) => setError(caught),
+    onError: (caught) => {
+      setFieldErrors(fieldErrorsFromApi(caught, fields.map((field) => field.name)));
+      setError(caught);
+    },
   });
 
   const archive = useMutation({
@@ -111,10 +153,19 @@ export function CrudPage<T extends { id: string; status?: string }>({
     onError: (caught) => setError(caught),
   });
 
+  const restore = useMutation({
+    mutationFn: async (id: string): Promise<void> => {
+      await post(`${path}/${id}/restore`);
+    },
+    onSuccess: invalidate,
+    onError: (caught) => setError(caught),
+  });
+
   const startCreate = (): void => {
     setEditing(null);
     setValues({});
     setError(null);
+    setFieldErrors({});
     setOpen(true);
   };
 
@@ -132,6 +183,7 @@ export function CrudPage<T extends { id: string; status?: string }>({
           ),
     );
     setError(null);
+    setFieldErrors({});
     setOpen(true);
   };
 
@@ -151,6 +203,16 @@ export function CrudPage<T extends { id: string; status?: string }>({
             onConfirm={() => archive.mutate(row.id)}
           />
         ) : null}
+        {archivable && row.status === 'ARCHIVED' ? (
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={restore.isPending}
+            onClick={() => restore.mutate(row.id)}
+          >
+            Unarchive
+          </button>
+        ) : null}
       </div>
     ),
   };
@@ -169,8 +231,27 @@ export function CrudPage<T extends { id: string; status?: string }>({
         }
       />
 
+      {error && !open ? (
+        <div className="mb-4">
+          <ErrorState error={error} />
+        </div>
+      ) : null}
+
       <div className="card">
-        <Toolbar search={state.search} onSearch={state.setSearch} />
+        <Toolbar search={state.search} onSearch={state.setSearch}>
+          {archivable ? (
+            <SelectFilter
+              label="All statuses"
+              value={state.filters.status as string | undefined}
+              options={[
+                { value: 'ACTIVE', label: 'Active' },
+                { value: 'INACTIVE', label: 'Inactive' },
+                { value: 'ARCHIVED', label: 'Archived' },
+              ]}
+              onChange={(value) => state.setFilter('status', value)}
+            />
+          ) : null}
+        </Toolbar>
         {list.isLoading ? (
           <Spinner />
         ) : list.error ? (
@@ -207,7 +288,7 @@ export function CrudPage<T extends { id: string; status?: string }>({
               type="button"
               className="btn-primary"
               disabled={save.isPending}
-              onClick={() => save.mutate()}
+              onClick={submit}
             >
               {save.isPending ? 'Saving…' : 'Save'}
             </button>
@@ -217,14 +298,17 @@ export function CrudPage<T extends { id: string; status?: string }>({
         <div className="grid gap-3 sm:grid-cols-2">
           {fields.map((field) => (
             <div key={field.name} className={field.type === 'textarea' ? 'sm:col-span-2' : ''}>
-              <Field label={field.label} hint={field.hint}>
+              <Field
+                label={field.label}
+                hint={field.hint}
+                required={field.required}
+                error={fieldErrors[field.name]}
+              >
                 {field.type === 'select' ? (
                   <select
                     className="input"
                     value={String(values[field.name] ?? '')}
-                    onChange={(event) =>
-                      setValues((current) => ({ ...current, [field.name]: event.target.value }))
-                    }
+                    onChange={(event) => setValue(field.name, event.target.value)}
                   >
                     <option value="">Select…</option>
                     {(field.options ?? []).map((option) => (
@@ -238,29 +322,22 @@ export function CrudPage<T extends { id: string; status?: string }>({
                     className="input"
                     rows={3}
                     value={String(values[field.name] ?? '')}
-                    onChange={(event) =>
-                      setValues((current) => ({ ...current, [field.name]: event.target.value }))
-                    }
+                    onChange={(event) => setValue(field.name, event.target.value)}
                   />
                 ) : field.type === 'checkbox' ? (
                   <input
                     type="checkbox"
                     className="h-4 w-4 rounded border-slate-300"
                     checked={Boolean(values[field.name])}
-                    onChange={(event) =>
-                      setValues((current) => ({ ...current, [field.name]: event.target.checked }))
-                    }
+                    onChange={(event) => setValue(field.name, event.target.checked)}
                   />
                 ) : (
                   <input
                     className="input"
                     type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
                     step={field.type === 'number' ? 'any' : undefined}
-                    required={field.required}
                     value={String(values[field.name] ?? '')}
-                    onChange={(event) =>
-                      setValues((current) => ({ ...current, [field.name]: event.target.value }))
-                    }
+                    onChange={(event) => setValue(field.name, event.target.value)}
                   />
                 )}
               </Field>

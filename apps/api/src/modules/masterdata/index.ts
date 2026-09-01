@@ -59,14 +59,12 @@ export const warehousesRouter = crudRouter({
       .enum([
         'MAIN_WAREHOUSE',
         'BRANCH_WAREHOUSE',
-        'RESTAURANT_KITCHEN',
         'COLD_STORAGE',
         'PACKAGING_STORE',
         'RETAIL_STORE',
       ])
       .optional(),
     locationId: z.string().uuid().optional(),
-    status: z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']).optional(),
   },
   include: {
     location: { select: { id: true, name: true } },
@@ -80,7 +78,6 @@ export const warehousesRouter = crudRouter({
       .enum([
         'MAIN_WAREHOUSE',
         'BRANCH_WAREHOUSE',
-        'RESTAURANT_KITCHEN',
         'COLD_STORAGE',
         'PACKAGING_STORE',
         'RETAIL_STORE',
@@ -101,7 +98,6 @@ export const suppliersRouter = crudRouter({
   sortable: ['name', 'companyName', 'createdAt'],
   defaultSort: 'name',
   searchFields: ['name', 'companyName', 'email', 'phone'],
-  filters: { status: z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']).optional() },
   createSchema: z.object({
     name: z.string().trim().min(1).max(160),
     companyName: z.string().trim().max(160).optional(),

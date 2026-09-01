@@ -12,7 +12,7 @@ export default function CategoriesPage() {
   return (
     <CrudPage<Category>
       title="Categories"
-      subtitle="Hierarchical grouping for products and ingredients"
+      subtitle="Hierarchical grouping for the product catalogue"
       path="/api/categories"
       canManage={can('category.manage')}
       columns={[

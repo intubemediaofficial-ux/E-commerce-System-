@@ -18,7 +18,6 @@ import productsRouter from './modules/products/products.routes';
 import inventoryRouter from './modules/inventory/inventory.routes';
 import transfersRouter from './modules/inventory/transfers.routes';
 import { purchasingRouter } from './modules/purchasing';
-import { restaurantRouter } from './modules/restaurant';
 import { ecommerceRouter } from './modules/ecommerce';
 import { reportsRouter } from './modules/reports';
 import { dashboardRouter } from './modules/dashboard';
@@ -93,7 +92,6 @@ export function createApp(): Application {
   api.use('/uploads', uploadsRouter);
   api.use('/inventory', inventoryRouter);
   api.use('/stock-transfers', transfersRouter);
-  api.use('/restaurant', restaurantRouter);
   api.use('/ecommerce', ecommerceRouter);
   api.use('/reports', reportsRouter);
   api.use('/dashboard', dashboardRouter);

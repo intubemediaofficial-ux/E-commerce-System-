@@ -9,7 +9,6 @@ export type NavIcon =
   | 'catalogue'
   | 'inventory'
   | 'purchasing'
-  | 'restaurant'
   | 'ecommerce'
   | 'insights'
   | 'administration';
@@ -27,7 +26,6 @@ export const NAVIGATION: NavSection[] = [
     items: [
       { href: '/dashboard', label: 'Admin dashboard', permission: 'report.view' },
       { href: '/dashboard/inventory', label: 'Inventory dashboard', permission: 'inventory.view' },
-      { href: '/dashboard/restaurant', label: 'Restaurant dashboard', permission: 'report.view' },
       { href: '/dashboard/ecommerce', label: 'E-commerce dashboard', permission: 'report.view' },
     ],
   },
@@ -66,20 +64,11 @@ export const NAVIGATION: NavSection[] = [
     ],
   },
   {
-    title: 'Restaurant',
-    icon: 'restaurant',
-    items: [
-      { href: '/recipes', label: 'Recipes', permission: 'recipe.view' },
-      { href: '/restaurant/orders', label: 'Kitchen orders', permission: 'restaurant.order.view' },
-      { href: '/restaurant/consumption', label: 'Consumption', permission: 'restaurant.order.view' },
-      { href: '/restaurant/food-cost', label: 'Food cost', permission: 'report.view' },
-    ],
-  },
-  {
     title: 'E-commerce',
     icon: 'ecommerce',
     items: [
       { href: '/ecommerce/orders', label: 'Orders', permission: 'ecommerce.order.view' },
+      { href: '/ecommerce/customers', label: 'Customers', permission: 'ecommerce.order.view' },
       { href: '/ecommerce/reservations', label: 'Reservations', permission: 'ecommerce.order.view' },
       { href: '/ecommerce/bundles', label: 'Product bundles', permission: 'product.view' },
     ],

@@ -106,7 +106,6 @@ export interface ProductBatch {
 export interface ProductDetail extends Product {
   variants?: ProductVariant[];
   batches?: ProductBatch[];
-  recipes?: { id: string; name: string; yieldQuantity: string; status: Status }[];
 }
 
 export interface Supplier {
@@ -178,32 +177,6 @@ export interface PurchaseOrderItem {
   unitCost: string;
   total: string;
   product?: { name: string; sku: string };
-}
-
-export interface Recipe {
-  id: string;
-  name: string;
-  yieldQuantity: string;
-  status: Status;
-  product: { id: string; name: string; sku: string; sellingPrice: string };
-  items: {
-    id: string;
-    ingredientProductId: string;
-    quantity: string;
-    wastagePercentage: string;
-    ingredientProduct?: { name: string; sku: string };
-  }[];
-}
-
-export interface RestaurantOrder {
-  id: string;
-  orderNumber: string;
-  status: string;
-  tableNumber: string | null;
-  grandTotal: string;
-  createdAt: string;
-  warehouse: { name: string; code: string };
-  items?: { id: string; productId: string; quantity: string; unitPrice: string; product?: { name: string } }[];
 }
 
 export interface EcommerceOrder {

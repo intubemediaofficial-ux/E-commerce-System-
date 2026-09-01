@@ -6,7 +6,7 @@ import { receiveStock } from '../src/services/inventory.service';
 
 const prisma = new PrismaClient();
 
-const ORG_SLUG = 'demo-foods';
+const ORG_SLUG = 'demo-commerce';
 const DEVELOPMENT_PASSWORD = 'Admin@12345';
 const DEFAULT_PASSWORD = process.env.SEED_PASSWORD?.trim() || DEVELOPMENT_PASSWORD;
 
@@ -72,8 +72,6 @@ async function seedUsers(
     { email: 'admin@demo.test', name: 'Business Admin', role: 'admin' },
     { email: 'inventory@demo.test', name: 'Inventory Manager', role: 'inventory_manager' },
     { email: 'purchase@demo.test', name: 'Purchase Manager', role: 'purchase_manager' },
-    { email: 'restaurant@demo.test', name: 'Restaurant Manager', role: 'restaurant_manager' },
-    { email: 'kitchen@demo.test', name: 'Kitchen Staff', role: 'kitchen_staff' },
     { email: 'sales@demo.test', name: 'Sales Manager', role: 'sales_manager' },
     { email: 'accounts@demo.test', name: 'Accountant', role: 'accountant' },
   ];
@@ -112,11 +110,18 @@ async function seedUsers(
 async function main(): Promise<void> {
   const permissionIds = await seedPermissions();
 
+  // Legacy demo data used a restaurant-flavoured slug before the panel became
+  // e-commerce only; rename it in place so reseeding never forks a second org.
+  await prisma.organization.updateMany({
+    where: { slug: 'demo-foods' },
+    data: { slug: ORG_SLUG },
+  });
+
   const organization = await prisma.organization.upsert({
     where: { slug: ORG_SLUG },
-    update: {},
+    update: { name: 'Demo Commerce Pvt Ltd' },
     create: {
-      name: 'Demo Foods & Retail Pvt Ltd',
+      name: 'Demo Commerce Pvt Ltd',
       slug: ORG_SLUG,
       email: 'ops@demo.test',
       phone: '+911234567890',
@@ -174,9 +179,9 @@ async function main(): Promise<void> {
 
   const warehouseSpecs: { code: string; name: string; type: WarehouseType; location: string }[] = [
     { code: 'JAI-MAIN', name: 'Jaipur Main Warehouse', type: 'MAIN_WAREHOUSE', location: 'JAI' },
-    { code: 'JAI-KIT', name: 'Jaipur Restaurant Kitchen', type: 'RESTAURANT_KITCHEN', location: 'JAI' },
+    { code: 'JAI-STORE', name: 'Jaipur Retail Store', type: 'RETAIL_STORE', location: 'JAI' },
     { code: 'DEL-MAIN', name: 'Delhi Warehouse', type: 'BRANCH_WAREHOUSE', location: 'DEL' },
-    { code: 'DEL-KIT', name: 'Delhi Restaurant Kitchen', type: 'RESTAURANT_KITCHEN', location: 'DEL' },
+    { code: 'DEL-PACK', name: 'Delhi Packaging Store', type: 'PACKAGING_STORE', location: 'DEL' },
     { code: 'BLR-COLD', name: 'Bengaluru Cold Storage', type: 'COLD_STORAGE', location: 'BLR' },
   ];
   const warehouses = new Map<string, string>();
@@ -198,10 +203,11 @@ async function main(): Promise<void> {
 
   // Categories --------------------------------------------------------------
   const categoryTree: Record<string, string[]> = {
-    Food: ['Beverages', 'Snacks', 'Bakery', 'Dairy', 'Vegetables', 'Meat', 'Spices', 'Grains'],
-    Retail: ['Apparel', 'Electronics', 'Home', 'Beauty'],
-    Restaurant: ['Starters', 'Main Course', 'Desserts', 'Combos'],
-    Supplies: ['Packaging', 'Cleaning', 'Disposables', 'Utensils'],
+    Electronics: ['Mobiles', 'Laptops', 'Audio', 'Accessories'],
+    Fashion: ['Apparel', 'Footwear', 'Bags'],
+    Home: ['Kitchenware', 'Furnishing', 'Beauty'],
+    Grocery: ['Beverages', 'Snacks', 'Bakery', 'Dairy', 'Spices', 'Grains'],
+    Supplies: ['Packaging', 'Disposables'],
   };
   const categories = new Map<string, string>();
   for (const [parentName, children] of Object.entries(categoryTree)) {
@@ -271,30 +277,25 @@ async function main(): Promise<void> {
     reorderLevel: number;
   }
 
-  const ingredientSpecs: ProductSpec[] = [
-    { sku: 'ING-BUN', name: 'Burger Bun', type: 'INGREDIENT', unit: 'PCS', category: 'Bakery', purchasePrice: 8, sellingPrice: 0, reorderLevel: 100, perishable: true, trackBatches: true },
-    { sku: 'ING-PATTY', name: 'Veg Patty', type: 'INGREDIENT', unit: 'PCS', category: 'Snacks', purchasePrice: 18, sellingPrice: 0, reorderLevel: 80, perishable: true, trackBatches: true },
-    { sku: 'ING-CHEESE', name: 'Cheese Slice', type: 'INGREDIENT', unit: 'PCS', category: 'Dairy', purchasePrice: 6, sellingPrice: 0, reorderLevel: 150, perishable: true, trackBatches: true },
-    { sku: 'ING-TOMATO', name: 'Tomato', type: 'INGREDIENT', unit: 'G', category: 'Vegetables', purchasePrice: 0.05, sellingPrice: 0, reorderLevel: 5000, perishable: true, trackBatches: true },
-    { sku: 'ING-ONION', name: 'Onion', type: 'INGREDIENT', unit: 'G', category: 'Vegetables', purchasePrice: 0.04, sellingPrice: 0, reorderLevel: 5000, perishable: true },
-    { sku: 'ING-SAUCE', name: 'Burger Sauce', type: 'INGREDIENT', unit: 'G', category: 'Spices', purchasePrice: 0.2, sellingPrice: 0, reorderLevel: 2000 },
-    { sku: 'ING-CHEDDAR', name: 'Cheddar Cheese', type: 'INGREDIENT', unit: 'G', category: 'Dairy', purchasePrice: 0.5, sellingPrice: 0, reorderLevel: 3000, perishable: true, trackBatches: true },
-    { sku: 'ING-FLOUR', name: 'Pizza Flour', type: 'RAW_MATERIAL', unit: 'G', category: 'Grains', purchasePrice: 0.05, sellingPrice: 0, reorderLevel: 10000 },
-    { sku: 'ING-POTATO', name: 'Potato', type: 'INGREDIENT', unit: 'G', category: 'Vegetables', purchasePrice: 0.03, sellingPrice: 0, reorderLevel: 8000 },
-    { sku: 'ING-OIL', name: 'Frying Oil', type: 'RAW_MATERIAL', unit: 'ML', category: 'Grains', purchasePrice: 0.14, sellingPrice: 0, reorderLevel: 10000 },
-    { sku: 'PKG-BOX', name: 'Burger Box', type: 'PACKAGING_MATERIAL', unit: 'PCS', category: 'Packaging', purchasePrice: 4, sellingPrice: 0, reorderLevel: 300 },
-    { sku: 'PKG-CUP', name: 'Beverage Cup', type: 'PACKAGING_MATERIAL', unit: 'PCS', category: 'Disposables', purchasePrice: 3, sellingPrice: 0, reorderLevel: 300 },
-  ];
-
-  const menuSpecs: ProductSpec[] = [
-    { sku: 'MENU-BURGER', name: 'Cheese Burger', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Main Course', purchasePrice: 0, sellingPrice: 149, reorderLevel: 0 },
-    { sku: 'MENU-PIZZA', name: 'Margherita Pizza', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Main Course', purchasePrice: 0, sellingPrice: 299, reorderLevel: 0 },
-    { sku: 'MENU-FRIES', name: 'French Fries', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Starters', purchasePrice: 0, sellingPrice: 99, reorderLevel: 0 },
+  // A realistic e-commerce catalogue: recognisable brands make search demos useful.
+  const featuredSpecs: ProductSpec[] = [
+    { sku: 'MOB-IP15', name: 'iPhone 15', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Mobiles', purchasePrice: 62000, sellingPrice: 74900, reorderLevel: 5 },
+    { sku: 'MOB-IP15P', name: 'iPhone 15 Pro', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Mobiles', purchasePrice: 108000, sellingPrice: 129900, reorderLevel: 5 },
+    { sku: 'MOB-IP15PM', name: 'iPhone 15 Pro Max', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Mobiles', purchasePrice: 132000, sellingPrice: 159900, reorderLevel: 5 },
+    { sku: 'MOB-SGS24', name: 'Samsung Galaxy S24', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Mobiles', purchasePrice: 58000, sellingPrice: 74999, reorderLevel: 5 },
+    { sku: 'MOB-SGS24U', name: 'Samsung Galaxy S24 Ultra', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Mobiles', purchasePrice: 105000, sellingPrice: 129999, reorderLevel: 5 },
+    { sku: 'MOB-SGA55', name: 'Samsung Galaxy A55', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Mobiles', purchasePrice: 32000, sellingPrice: 39999, reorderLevel: 8 },
+    { sku: 'LAP-MBA13', name: 'MacBook Air 13 M3', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Laptops', purchasePrice: 92000, sellingPrice: 114900, reorderLevel: 3 },
+    { sku: 'AUD-APP2', name: 'AirPods Pro 2', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Audio', purchasePrice: 19000, sellingPrice: 24900, reorderLevel: 10 },
+    { sku: 'AUD-SGB3', name: 'Samsung Galaxy Buds 3', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Audio', purchasePrice: 9500, sellingPrice: 12999, reorderLevel: 10 },
+    { sku: 'ACC-CBL20', name: 'USB-C Cable 2 m', type: 'FINISHED_PRODUCT', unit: 'PCS', category: 'Accessories', purchasePrice: 220, sellingPrice: 499, reorderLevel: 50 },
+    { sku: 'PKG-BOX', name: 'Shipping Box (Medium)', type: 'PACKAGING_MATERIAL', unit: 'PCS', category: 'Packaging', purchasePrice: 12, sellingPrice: 0, reorderLevel: 300 },
+    { sku: 'PKG-WRAP', name: 'Bubble Wrap Roll', type: 'PACKAGING_MATERIAL', unit: 'PCS', category: 'Packaging', purchasePrice: 180, sellingPrice: 0, reorderLevel: 40 },
   ];
 
   const retailSpecs: ProductSpec[] = Array.from({ length: 40 }, (_, index) => {
     const number = index + 1;
-    const categoryNames = ['Apparel', 'Electronics', 'Home', 'Beauty'];
+    const categoryNames = ['Apparel', 'Footwear', 'Kitchenware', 'Beauty'];
     return {
       sku: `RET-${String(number).padStart(3, '0')}`,
       name: `Retail Product ${number}`,
@@ -324,7 +325,7 @@ async function main(): Promise<void> {
     };
   });
 
-  const allSpecs = [...ingredientSpecs, ...menuSpecs, ...retailSpecs, ...grocerySpecs];
+  const allSpecs = [...featuredSpecs, ...retailSpecs, ...grocerySpecs];
   const products = new Map<string, string>();
   for (const spec of allSpecs) {
     const row = await prisma.product.upsert({
@@ -375,71 +376,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // Recipes ----------------------------------------------------------------
-  const recipeSpecs = [
-    {
-      product: 'MENU-BURGER',
-      name: 'Cheese Burger Recipe',
-      items: [
-        { sku: 'ING-BUN', quantity: 1, unit: 'PCS', wastage: 2 },
-        { sku: 'ING-PATTY', quantity: 1, unit: 'PCS', wastage: 2 },
-        { sku: 'ING-CHEESE', quantity: 1, unit: 'PCS', wastage: 0 },
-        { sku: 'ING-TOMATO', quantity: 20, unit: 'G', wastage: 5 },
-        { sku: 'ING-ONION', quantity: 15, unit: 'G', wastage: 5 },
-        { sku: 'ING-SAUCE', quantity: 10, unit: 'G', wastage: 0 },
-        { sku: 'PKG-BOX', quantity: 1, unit: 'PCS', wastage: 0 },
-      ],
-    },
-    {
-      product: 'MENU-PIZZA',
-      name: 'Margherita Pizza Recipe',
-      items: [
-        { sku: 'ING-FLOUR', quantity: 220, unit: 'G', wastage: 3 },
-        { sku: 'ING-CHEDDAR', quantity: 120, unit: 'G', wastage: 2 },
-        { sku: 'ING-TOMATO', quantity: 90, unit: 'G', wastage: 5 },
-        { sku: 'ING-SAUCE', quantity: 30, unit: 'G', wastage: 0 },
-      ],
-    },
-    {
-      product: 'MENU-FRIES',
-      name: 'French Fries Recipe',
-      items: [
-        { sku: 'ING-POTATO', quantity: 250, unit: 'G', wastage: 8 },
-        { sku: 'ING-OIL', quantity: 40, unit: 'ML', wastage: 0 },
-        { sku: 'PKG-CUP', quantity: 1, unit: 'PCS', wastage: 0 },
-      ],
-    },
-  ];
-
-  for (const recipe of recipeSpecs) {
-    const productId = products.get(recipe.product);
-    if (!productId) continue;
-    const existing = await prisma.recipe.findFirst({
-      where: { organizationId, productId, name: recipe.name },
-    });
-    const recipeId =
-      existing?.id ??
-      (
-        await prisma.recipe.create({
-          data: { organizationId, productId, name: recipe.name, yieldQuantity: D(1), unitLabel: 'plate' },
-        })
-      ).id;
-
-    await prisma.recipeItem.deleteMany({ where: { recipeId } });
-    await prisma.recipeItem.createMany({
-      data: recipe.items
-        .filter((item) => products.has(item.sku))
-        .map((item) => ({
-          recipeId,
-          ingredientProductId: products.get(item.sku)!,
-          quantity: D(item.quantity),
-          unitId: units.get(item.unit) ?? null,
-          wastagePercentage: D(item.wastage),
-        })),
-      skipDuplicates: true,
-    });
-  }
-
   // Bundle -----------------------------------------------------------------
   const comboSku = 'GRO-001';
   const comboProductId = products.get(comboSku);
@@ -467,17 +403,17 @@ async function main(): Promise<void> {
     cost: number;
     trackBatches?: boolean;
   }[] = [
-    ...ingredientSpecs.map((spec) => ({
+    ...featuredSpecs.map((spec) => ({
       sku: spec.sku,
-      warehouse: 'JAI-KIT',
-      quantity: spec.unit === 'PCS' ? 400 : 40_000,
+      warehouse: 'JAI-MAIN',
+      quantity: spec.type === 'PACKAGING_MATERIAL' ? 500 : 25,
       cost: spec.purchasePrice,
       trackBatches: spec.trackBatches,
     })),
-    ...ingredientSpecs.map((spec) => ({
+    ...featuredSpecs.slice(0, 6).map((spec) => ({
       sku: spec.sku,
-      warehouse: 'JAI-MAIN',
-      quantity: spec.unit === 'PCS' ? 800 : 80_000,
+      warehouse: 'JAI-STORE',
+      quantity: 10,
       cost: spec.purchasePrice,
       trackBatches: spec.trackBatches,
     })),

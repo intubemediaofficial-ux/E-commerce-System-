@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { get, post } from '@/lib/api';
 import { dateOnly, money, qty } from '@/lib/format';
 import { useAuth } from '@/components/AuthProvider';
 import { useList, useListState } from '@/hooks/useList';
+import { useStockRefresh } from '@/hooks/useStockRefresh';
 import { useSupplierOptions, useWarehouseOptions } from '@/hooks/useOptions';
 import { ProductPicker } from '@/components/ProductPicker';
 import { SelectFilter, Toolbar } from '@/components/Toolbar';
@@ -74,7 +75,7 @@ export default function PurchaseOrdersPage() {
   const { can } = useAuth();
   const state = useListState();
   const list = useList<PoListRow>('/api/purchase-orders', state);
-  const queryClient = useQueryClient();
+  const invalidate = useStockRefresh();
   const { options: suppliers } = useSupplierOptions();
   const { options: warehouses } = useWarehouseOptions();
 
@@ -95,9 +96,6 @@ export default function PurchaseOrdersPage() {
     enabled: Boolean(receiveId),
   });
 
-  const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders'] });
-  };
 
   const create = useMutation({
     mutationFn: async () =>
