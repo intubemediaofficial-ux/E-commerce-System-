@@ -32,7 +32,17 @@ export class ApiRequestError extends Error {
   }
 }
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const CONFIGURED_API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+/** A localhost base can never be reached from a bundle served by a real host, so use same origin. */
+function resolveApiUrl(): string {
+  if (typeof window === 'undefined') return CONFIGURED_API_URL;
+  const localBase = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(CONFIGURED_API_URL);
+  const localPage = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  return localBase && !localPage ? window.location.origin : CONFIGURED_API_URL;
+}
+
+export const API_URL = resolveApiUrl();
 
 const ACCESS_KEY = 'ims.accessToken';
 const REFRESH_KEY = 'ims.refreshToken';
