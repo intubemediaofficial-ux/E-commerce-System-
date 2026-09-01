@@ -103,6 +103,9 @@ body {
   .input {
     @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 disabled:bg-slate-100 disabled:text-slate-500;
   }
+  .field-invalid .input {
+    @apply border-rose-400 focus:border-rose-500 focus:ring-rose-100;
+  }
   .label {
     @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500;
   }

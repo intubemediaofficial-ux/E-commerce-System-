@@ -24,3 +24,18 @@ export const titleCase = (value: string): string =>
     .split(/[\s_]+/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+
+export interface StockTotals {
+  onHand: number;
+  reserved: number;
+  available: number;
+}
+
+/** Sums per-warehouse stock rows returned with a product. */
+export function stockTotals(
+  stock?: { quantity: string; reservedQuantity: string }[] | null,
+): StockTotals {
+  const onHand = (stock ?? []).reduce((sum, row) => sum + Number(row.quantity ?? 0), 0);
+  const reserved = (stock ?? []).reduce((sum, row) => sum + Number(row.reservedQuantity ?? 0), 0);
+  return { onHand, reserved, available: onHand - reserved };
+}

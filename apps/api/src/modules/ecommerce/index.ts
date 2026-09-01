@@ -485,6 +485,81 @@ ecommerceRouter.post(
   }),
 );
 
+/**
+ * Customers are derived from placed orders (contact details live on the order),
+ * grouped by email, then phone, then name.
+ */
+ecommerceRouter.get(
+  '/customers',
+  requirePermission('ecommerce.order.view'),
+  validate({ query: paginationSchema }),
+  asyncHandler(async (req, res) => {
+    const q = req.query as unknown as z.infer<typeof paginationSchema>;
+    const orders = await prisma.ecommerceOrder.findMany({
+      where: {
+        organizationId: orgId(req),
+        ...(q.search
+          ? {
+              OR: [
+                { customerName: { contains: q.search, mode: 'insensitive' } },
+                { customerEmail: { contains: q.search, mode: 'insensitive' } },
+                { customerPhone: { contains: q.search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        customerName: true,
+        customerEmail: true,
+        customerPhone: true,
+        grandTotal: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const byKey = new Map<
+      string,
+      {
+        name: string;
+        email: string | null;
+        phone: string | null;
+        orders: number;
+        totalSpend: Prisma.Decimal;
+        lastOrderAt: Date;
+      }
+    >();
+    for (const order of orders) {
+      const key = (order.customerEmail ?? order.customerPhone ?? order.customerName ?? 'guest')
+        .trim()
+        .toLowerCase();
+      const existing = byKey.get(key);
+      const spend = order.status === 'CANCELLED' ? ZERO : D(order.grandTotal);
+      if (existing) {
+        existing.orders += 1;
+        existing.totalSpend = existing.totalSpend.plus(spend);
+        if (order.createdAt > existing.lastOrderAt) existing.lastOrderAt = order.createdAt;
+      } else {
+        byKey.set(key, {
+          name: order.customerName ?? 'Guest customer',
+          email: order.customerEmail,
+          phone: order.customerPhone,
+          orders: 1,
+          totalSpend: spend,
+          lastOrderAt: order.createdAt,
+        });
+      }
+    }
+
+    const all = [...byKey.values()]
+      .sort((a, b) => b.lastOrderAt.getTime() - a.lastOrderAt.getTime())
+      .map((row) => ({ ...row, totalSpend: row.totalSpend.toFixed(2) }));
+    const start = (q.page - 1) * q.perPage;
+    return ok(res, all.slice(start, start + q.perPage), pageMeta(q.page, q.perPage, all.length));
+  }),
+);
+
 ecommerceRouter.get(
   '/reservations',
   requirePermission('ecommerce.order.view'),

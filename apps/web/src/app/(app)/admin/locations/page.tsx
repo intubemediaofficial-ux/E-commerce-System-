@@ -13,7 +13,7 @@ export default function LocationsPage() {
   return (
     <CrudPage<LocationRow>
       title="Locations"
-      subtitle="Branches and sites that group warehouses and kitchens"
+      subtitle="Branches and sites that group warehouses and stores"
       path="/api/locations"
       canManage={can('location.manage')}
       columns={[

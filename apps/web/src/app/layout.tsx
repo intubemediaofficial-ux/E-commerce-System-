@@ -4,7 +4,7 @@ import { Providers } from './providers';
 
 export const metadata: Metadata = {
   title: 'Inventory Management System',
-  description: 'Unified e-commerce and restaurant inventory control',
+  description: 'Unified e-commerce inventory and order control',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -97,9 +97,6 @@ const reportPaths = [
   'supplier-purchases',
   'purchase-returns',
   'price-history',
-  'consumption',
-  'food-cost',
-  'recipe-cost',
   'sales',
   'product-sales',
   'stock-movement',
@@ -123,7 +120,7 @@ export const openApiDocument = {
     title: 'Inventory Management System API',
     version: '1.0.0',
     description: [
-      'Multi-tenant inventory API for e-commerce and restaurant operations.',
+      'Multi-tenant inventory and e-commerce management API.',
       '',
       'Guarantees: every stock change is transactional, writes an immutable ledger row,',
       'is permission checked, is audited, and can be made idempotent with the',
@@ -140,7 +137,6 @@ export const openApiDocument = {
     { name: 'Inventory' },
     { name: 'Transfers' },
     { name: 'Purchasing' },
-    { name: 'Restaurant' },
     { name: 'E-commerce' },
     { name: 'Reports' },
     { name: 'Dashboard' },
@@ -245,8 +241,9 @@ export const openApiDocument = {
     '/api/suppliers/{id}/history': { get: simpleOp('Purchasing', 'Supplier purchase history and balance', { params: idParam }) },
 
     '/api/products': { get: listOp('Products', 'List products'), post: simpleOp('Products', 'Create product', { body: true }) },
+    '/api/products/{id}/restore': { post: simpleOp('Products', 'Restore an archived product', { params: idParam }) },
     '/api/products/{id}': {
-      get: simpleOp('Products', 'Product detail with stock and recipes', { params: idParam }),
+      get: simpleOp('Products', 'Product detail with stock and movement history', { params: idParam }),
       put: simpleOp('Products', 'Update product', { body: true, params: idParam }),
       delete: simpleOp('Products', 'Archive product', { params: idParam }),
     },
@@ -310,33 +307,6 @@ export const openApiDocument = {
       post: simpleOp('Purchasing', 'Create purchase return', { body: true, idempotent: true }),
     },
 
-    '/api/restaurant/recipes': {
-      get: listOp('Restaurant', 'List recipes'),
-      post: simpleOp('Restaurant', 'Create recipe', { body: true }),
-    },
-    '/api/restaurant/recipes/{id}': {
-      get: simpleOp('Restaurant', 'Recipe detail', { params: idParam }),
-      put: simpleOp('Restaurant', 'Update recipe', { body: true, params: idParam }),
-      delete: simpleOp('Restaurant', 'Archive recipe', { params: idParam }),
-    },
-    '/api/restaurant/recipes/{id}/cost': { get: simpleOp('Restaurant', 'Theoretical recipe cost', { params: idParam }) },
-    '/api/restaurant/recipes/{id}/requirements': {
-      get: simpleOp('Restaurant', 'Ingredient requirement preview', { params: idParam }),
-    },
-    '/api/restaurant/orders': {
-      get: listOp('Restaurant', 'List restaurant orders'),
-      post: simpleOp('Restaurant', 'Create restaurant order', { body: true }),
-    },
-    '/api/restaurant/orders/{id}/complete': {
-      post: simpleOp('Restaurant', 'Complete order and consume recipe ingredients', {
-        params: idParam,
-        idempotent: true,
-      }),
-    },
-    '/api/restaurant/consumption': {
-      post: simpleOp('Restaurant', 'Record ad-hoc kitchen consumption', { body: true, idempotent: true }),
-    },
-
     '/api/ecommerce/orders': {
       get: listOp('E-commerce', 'List orders'),
       post: simpleOp('E-commerce', 'Create order', { body: true }),
@@ -354,9 +324,9 @@ export const openApiDocument = {
       post: simpleOp('E-commerce', 'Validate a return and restock', { body: true, params: idParam, idempotent: true }),
     },
     '/api/ecommerce/reservations': { get: listOp('E-commerce', 'List reservations') },
+    '/api/ecommerce/customers': { get: listOp('E-commerce', 'Customers derived from orders') },
 
     '/api/dashboard/admin': { get: simpleOp('Dashboard', 'Admin KPIs') },
-    '/api/dashboard/restaurant': { get: simpleOp('Dashboard', 'Kitchen KPIs and food cost') },
     '/api/dashboard/ecommerce': { get: simpleOp('Dashboard', 'Sales KPIs and reservations') },
 
     '/api/admin/users': { get: listOp('Admin', 'List users'), post: simpleOp('Admin', 'Create user', { body: true }) },

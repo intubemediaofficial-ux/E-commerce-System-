@@ -1,6 +1,6 @@
 import { Tx, prisma } from '../lib/prisma';
 
-type Sequence = 'PO' | 'GRN' | 'TRF' | 'ADJ' | 'PRT' | 'RO' | 'EO';
+type Sequence = 'PO' | 'GRN' | 'TRF' | 'ADJ' | 'PRT' | 'EO';
 
 const TABLES: Record<Sequence, string> = {
   PO: 'PurchaseOrder',
@@ -8,7 +8,6 @@ const TABLES: Record<Sequence, string> = {
   TRF: 'StockTransfer',
   ADJ: 'StockAdjustment',
   PRT: 'PurchaseReturn',
-  RO: 'RestaurantOrder',
   EO: 'EcommerceOrder',
 };
 
@@ -18,7 +17,6 @@ const COLUMNS: Record<Sequence, string> = {
   TRF: 'transferNumber',
   ADJ: 'adjustmentNumber',
   PRT: 'returnNumber',
-  RO: 'orderNumber',
   EO: 'orderNumber',
 };
 

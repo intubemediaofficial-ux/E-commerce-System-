@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { assetUrl, get, post, put } from '@/lib/api';
 import { dateOnly, money, qty, titleCase } from '@/lib/format';
 import { useAuth } from '@/components/AuthProvider';
+import { useStockRefresh } from '@/hooks/useStockRefresh';
 import { ImageUploader } from '@/components/ImageUploader';
 import { ProductFormModal } from '@/components/ProductFormModal';
 import {
@@ -42,8 +43,11 @@ export default function ProductDetailPage() {
     queryFn: async () => (await get<ProductDetail>(`/api/products/${productId}`)).data,
   });
 
+  const refreshStock = useStockRefresh();
+
   const invalidate = (): void => {
     void queryClient.invalidateQueries({ queryKey });
+    refreshStock();
   };
 
   const savePhoto = useMutation({
@@ -268,20 +272,6 @@ export default function ProductDetailPage() {
             ]}
           />
 
-          {(product.recipes ?? []).length > 0 ? (
-            <div className="mt-6">
-              <p className="label">Recipes producing this product</p>
-              <DataTable
-                rows={product.recipes ?? []}
-                emptyMessage="No recipes."
-                columns={[
-                  { header: 'Recipe', cell: (row) => row.name },
-                  { header: 'Yield', align: 'right', cell: (row) => qty(row.yieldQuantity) },
-                  { header: 'Status', cell: (row) => <Badge value={row.status} /> },
-                ]}
-              />
-            </div>
-          ) : null}
         </Card>
       </div>
 

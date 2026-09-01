@@ -1,11 +1,12 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { post } from '@/lib/api';
 import { dateTime, money, qty } from '@/lib/format';
 import { useAuth } from '@/components/AuthProvider';
 import { useList, useListState } from '@/hooks/useList';
+import { useStockRefresh } from '@/hooks/useStockRefresh';
 import { useWarehouseOptions } from '@/hooks/useOptions';
 import { ProductPicker } from '@/components/ProductPicker';
 import { SelectFilter, Toolbar } from '@/components/Toolbar';
@@ -57,7 +58,7 @@ export default function EcommerceOrdersPage() {
   const canManage = can('ecommerce.order.manage');
   const state = useListState();
   const list = useList<OrderRow>('/api/ecommerce/orders', state);
-  const queryClient = useQueryClient();
+  const invalidate = useStockRefresh();
   const { options: warehouses } = useWarehouseOptions();
 
   const [open, setOpen] = useState(false);
@@ -69,10 +70,6 @@ export default function EcommerceOrdersPage() {
   const [returnLines, setReturnLines] = useState<Record<string, string>>({});
   const [error, setError] = useState<unknown>(null);
 
-  const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ['/api/ecommerce/orders'] });
-    void queryClient.invalidateQueries({ queryKey: ['/api/ecommerce/reservations'] });
-  };
 
   const create = useMutation({
     mutationFn: async () =>
