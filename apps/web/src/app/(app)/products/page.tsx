@@ -29,7 +29,7 @@ const IMPORT_TEMPLATE =
 export default function ProductsPage() {
   const { can } = useAuth();
   const canManage = can('product.create') || can('product.update');
-  const state = useListState();
+  const state = useListState({ status: 'ACTIVE' });
   const list = useList<Product>('/api/products', state);
   const invalidate = useStockRefresh();
   const { options: categories } = useCategoryOptions();
