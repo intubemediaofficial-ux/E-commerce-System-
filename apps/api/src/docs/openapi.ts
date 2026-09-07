@@ -183,6 +183,9 @@ export const openApiDocument = {
       get: listOp('Products', 'List products'),
       post: simpleOp('Products', 'Create product', { body: true }),
     },
+    '/api/products/bulk-delete': {
+      post: simpleOp('Products', 'Delete several products at once', { body: true }),
+    },
     '/api/products/{id}': {
       get: simpleOp('Products', 'Product detail', { params: idParam }),
       put: simpleOp('Products', 'Update product', { body: true, params: idParam }),

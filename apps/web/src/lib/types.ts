@@ -16,6 +16,26 @@ export interface LoginResult {
   user: AuthUser;
 }
 
+export interface ManagedUser {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  status: Status;
+  lastLoginAt: string | null;
+  createdAt: string;
+  userRoles: { role: { id: string; slug: string; name: string } }[];
+}
+
+export interface ManagedRole {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  isSystem: boolean;
+  userCount: number;
+}
+
 export interface Product {
   id: string;
   name: string;

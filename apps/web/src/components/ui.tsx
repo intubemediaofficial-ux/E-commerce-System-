@@ -286,6 +286,8 @@ export interface ColumnDef<T> {
   header: string;
   cell: (row: T) => ReactNode;
   align?: 'left' | 'right';
+  /** Rendered instead of `header`, e.g. a select-all checkbox. */
+  headerCell?: ReactNode;
 }
 
 export function DataTable<T>({
@@ -313,7 +315,7 @@ export function DataTable<T>({
                   column.align === 'right' ? 'text-right' : 'text-left',
                 )}
               >
-                {column.header}
+                {column.headerCell ?? column.header}
               </th>
             ))}
           </tr>

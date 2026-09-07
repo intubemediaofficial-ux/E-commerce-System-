@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
-import { del } from '@/lib/api';
+import { del, post } from '@/lib/api';
 import { dateOnly, money, qty } from '@/lib/format';
 import { useAuth } from '@/components/AuthProvider';
 import { useList, useListState } from '@/hooks/useList';
@@ -25,16 +25,35 @@ export default function ProductsPage() {
   const state = useListState({ status: 'ACTIVE' });
   const list = useList<Product>('/api/products', state);
   const [error, setError] = useState<unknown>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const refresh = (): void => {
+    setError(null);
+    setSelected([]);
+    void queryClient.invalidateQueries({ queryKey: ['/api/products'] });
+    void queryClient.invalidateQueries({ queryKey: ['/api/dashboard/summary'] });
+  };
 
   const remove = useMutation({
     mutationFn: async (id: string) => del(`/api/products/${id}`),
-    onSuccess: () => {
-      setError(null);
-      void queryClient.invalidateQueries({ queryKey: ['/api/products'] });
-      void queryClient.invalidateQueries({ queryKey: ['/api/dashboard/summary'] });
-    },
+    onSuccess: refresh,
     onError: setError,
   });
+
+  const removeSelected = useMutation({
+    mutationFn: async (ids: string[]) => post('/api/products/bulk-delete', { ids }),
+    onSuccess: refresh,
+    onError: setError,
+  });
+
+  const toggle = (id: string): void =>
+    setSelected((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
+    );
+
+  const pageIds = list.rows.map((row) => row.id);
+  const allSelected = pageIds.length > 0 && pageIds.every((id) => selected.includes(id));
+  const canDelete = can('product.delete');
 
   return (
     <>
@@ -57,7 +76,17 @@ export default function ProductsPage() {
       ) : null}
 
       <div className="card">
-        <Toolbar search={state.search} onSearch={state.setSearch} />
+        <Toolbar search={state.search} onSearch={state.setSearch}>
+          {canDelete ? (
+            <ConfirmButton
+              label={`Delete selected${selected.length ? ` (${selected.length})` : ''}`}
+              variant="danger"
+              disabled={selected.length === 0 || removeSelected.isPending}
+              message={`Delete ${selected.length} selected product(s)? This cannot be undone.`}
+              onConfirm={() => removeSelected.mutate(selected)}
+            />
+          ) : null}
+        </Toolbar>
         {list.isLoading ? (
           <div className="p-6">
             <Spinner label="Loading products" />
@@ -71,6 +100,31 @@ export default function ProductsPage() {
             rows={list.rows}
             emptyMessage="No products yet. Use “Add Product” to create the first one."
             columns={[
+              ...(canDelete
+                ? [
+                    {
+                      header: 'Select',
+                      headerCell: (
+                        <input
+                          type="checkbox"
+                          aria-label="Select all products on this page"
+                          className="h-4 w-4"
+                          checked={allSelected}
+                          onChange={() => setSelected(allSelected ? [] : pageIds)}
+                        />
+                      ),
+                      cell: (row: Product) => (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${row.name}`}
+                          className="h-4 w-4"
+                          checked={selected.includes(row.id)}
+                          onChange={() => toggle(row.id)}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
               { header: 'Image', cell: (row) => <ProductThumb product={row} /> },
               {
                 header: 'Product title',
@@ -94,7 +148,7 @@ export default function ProductsPage() {
                         Edit
                       </Link>
                     ) : null}
-                    {can('product.delete') ? (
+                    {canDelete ? (
                       <ConfirmButton
                         label="Delete"
                         variant="danger"
