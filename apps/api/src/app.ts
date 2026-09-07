@@ -13,15 +13,9 @@ import { authenticate } from './middleware/auth';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { openApiDocument } from './docs/openapi';
 import authRouter from './modules/auth/auth.routes';
-import { masterDataRouter } from './modules/masterdata';
 import productsRouter from './modules/products/products.routes';
-import inventoryRouter from './modules/inventory/inventory.routes';
-import transfersRouter from './modules/inventory/transfers.routes';
-import { purchasingRouter } from './modules/purchasing';
-import { ecommerceRouter } from './modules/ecommerce';
-import { reportsRouter } from './modules/reports';
 import { dashboardRouter } from './modules/dashboard';
-import { adminRouter, notificationsRouter } from './modules/admin';
+import { adminRouter } from './modules/admin';
 import uploadsRouter from './modules/uploads/uploads.routes';
 
 export function createApp(): Application {
@@ -90,15 +84,8 @@ export function createApp(): Application {
   api.use(authenticate);
   api.use('/products', productsRouter);
   api.use('/uploads', uploadsRouter);
-  api.use('/inventory', inventoryRouter);
-  api.use('/stock-transfers', transfersRouter);
-  api.use('/ecommerce', ecommerceRouter);
-  api.use('/reports', reportsRouter);
   api.use('/dashboard', dashboardRouter);
-  api.use('/notifications', notificationsRouter);
   api.use('/admin', adminRouter);
-  api.use('/', purchasingRouter);
-  api.use('/', masterDataRouter);
   app.use('/api', api);
 
   app.use(notFoundHandler);

@@ -1,37 +1,38 @@
-# E-commerce Inventory Management System
+# E-commerce Product Register
 
-Multi-tenant e-commerce inventory platform with a ledger-backed stock core, purchasing
-workflows and order reservation/fulfilment flows.
+A deliberately simple, multi-tenant product register for a purchasing / product-listing team.
 
-- `apps/api` — Express + TypeScript REST API, Prisma/PostgreSQL, Redis + BullMQ jobs, Swagger docs
+- `apps/api` — Express + TypeScript REST API, Prisma/PostgreSQL, Swagger docs
 - `apps/web` — Next.js 14 App Router frontend (TanStack Query, Tailwind), fully responsive
 
-## Core guarantees
+## What a product is
 
-- Every physical stock movement writes an immutable `inventory_ledger` row; ledger rows are never
-  updated or deleted.
-- Stock mutations run inside a transaction with `SELECT ... FOR UPDATE` on the stock row, so
-  concurrent orders cannot oversell.
-- `available = quantity - reserved`; stock cannot go negative unless the organization enables it.
-- Reservations are separate from physical quantity: confirmation reserves, shipment consumes,
-  cancellation releases, returns restock only after validation.
-- Costing supports weighted-average and FIFO valuation; batch consumption can follow FEFO.
-- Inventory-mutating endpoints accept an `Idempotency-Key` header and replay the first result.
-- Every organization's data is scoped by `organizationId`; sensitive operations are audited.
+Six fields, nothing else:
+
+| Field | Notes |
+| --- | --- |
+| Product image | uploaded through `POST /api/uploads/images` |
+| Product title | required |
+| Cost price (₹) | purchase price |
+| Warehouse / shop name | one plain text field |
+| Date | defaults to today, editable |
+| Inventory / current stock | the units physically in stock right now, edited manually |
+
+There is no stock ledger, movement, transfer, adjustment workflow, batch, expiry, reservation,
+reorder level, purchase order, supplier, warehouse module, order, customer, category, brand, unit
+or report. The panel has three menu entries: Dashboard, Products, Add Product.
 
 ## Quick start (local)
 
 ```bash
 cp .env.example .env                # then edit secrets
 docker run -d --name ims-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ims -p 5432:5432 postgres:16-alpine
-docker run -d --name ims-redis -p 6379:6379 redis:7-alpine
 
 npm install
 npm run db:migrate --workspace=api
 npm run db:seed --workspace=api
 
 npm run dev                         # api on :4000, web on :3000
-npm run worker --workspace=api      # background jobs (optional)
 ```
 
 Seed logins (development data only):
@@ -41,14 +42,12 @@ Seed logins (development data only):
 | Super admin | superadmin@demo.test | Admin@12345 |
 | Admin (full access) | admin@demo.test | Admin@12345 |
 
-Other seeded users cover inventory manager, purchase manager, sales manager and accountant roles.
-
 ## Verification
 
 ```bash
 npm run lint
 npm run typecheck
-npm test          # unit + integration (needs Postgres/Redis and a seeded database)
+npm test          # unit + integration (needs Postgres and a seeded database)
 npm run build
 ```
 
@@ -64,22 +63,21 @@ JWT_SECRET=... JWT_REFRESH_SECRET=... docker compose up --build
 docker compose exec api npx prisma db seed   # optional demo data
 ```
 
-Compose starts PostgreSQL, Redis, the API (runs `prisma migrate deploy` on boot), the BullMQ
-worker and the frontend.
+Compose starts PostgreSQL, the API (runs `prisma migrate deploy` on boot) and the frontend.
 
-## Modules
+## API
 
-| Area | Highlights |
+| Area | Endpoints |
 | --- | --- |
 | Auth | login/refresh/logout, refresh-token rotation, forgot/reset/change password, Argon2 hashing |
 | RBAC | permission catalog, system + custom roles, Admin/Super Admin full bypass |
-| Master data | organizations, locations, warehouses, categories, brands, units + conversions, products, variants, bundles, suppliers |
-| Inventory | stock, immutable ledger, batches/expiry, adjustments (with high-value approval), transfers, wastage, opening-stock CSV import, barcode/SKU lookup |
-| Purchasing | purchase orders with approval workflow, partial goods receipts with batch capture, purchase returns, supplier price history |
-| E-commerce | orders, reservations with TTL, bundle expansion, pack/ship/complete/cancel, validated returns |
-| Analytics | admin/inventory/e-commerce dashboards, 20 reports with JSON/CSV/Excel/PDF export |
-| Notifications | low stock, out of stock, expiry, large wastage; in-app + email, recurring BullMQ jobs |
-| Audit | immutable audit log with actor, IP, user agent and before/after values |
+| Products | list/search, create, read, update, delete |
+| Uploads | product image upload |
+| Dashboard | total products, total current stock units, total purchase value, recently added |
+| Admin | users, roles, organization profile, audit log |
+
+The database still carries the tables from the earlier inventory build; they are unused by the
+panel and are kept so existing rows are not destroyed.
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for environment variables, migrations, backups,
 monitoring and logging guidance.

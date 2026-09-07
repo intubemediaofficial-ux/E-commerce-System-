@@ -460,6 +460,9 @@ model Product {
   isPerishable      Boolean     @default(false)
   shelfLifeDays     Int?
   imageUrl          String?
+  warehouseName     String?
+  stockDate         DateTime?   @db.Date
+  currentStock      Decimal     @default(0) @db.Decimal(18, 4)
   status            Status      @default(ACTIVE)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt

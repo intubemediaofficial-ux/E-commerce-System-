@@ -9,7 +9,6 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string().min(1),
-  REDIS_URL: z.string().default('redis://localhost:6379'),
   JWT_SECRET: z.string().min(8),
   JWT_REFRESH_SECRET: z.string().min(8),
   JWT_ACCESS_TTL: z.string().default('15m'),

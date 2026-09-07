@@ -5,7 +5,6 @@
 | Variable | Required | Description |
 | --- | --- | --- |
 | `DATABASE_URL` | yes | PostgreSQL connection string used by Prisma. |
-| `REDIS_URL` | yes | Redis connection for BullMQ queues and idempotency helpers. |
 | `JWT_SECRET` | yes | Access-token signing secret (rotate per environment). |
 | `JWT_REFRESH_SECRET` | yes | Refresh-token signing secret, must differ from `JWT_SECRET`. |
 | `JWT_ACCESS_TTL` | no | Access token lifetime, default `15m`. |
@@ -16,8 +15,8 @@
 | `CORS_ORIGINS` | no | Comma-separated allowed origins for the browser app. |
 | `LOG_LEVEL` | no | Pino level, default `info`. |
 | `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | no | API rate limiting window and cap. |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | no | Object storage for images, invoices and exported reports. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | no | Outbound email for notifications and password resets. |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | no | Object storage for product images. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | no | Outbound email for password resets. |
 | `NEXT_PUBLIC_API_URL` | yes (web) | Public API base URL baked into the frontend build. |
 
 Never commit real secrets. `.env.example` documents every key; supply values through your
@@ -43,23 +42,18 @@ If production demo data is explicitly required, set `NODE_ENV=production` and a 
 | Process | Command | Notes |
 | --- | --- | --- |
 | API | `node dist/server.js` | Stateless, scale horizontally behind a load balancer. |
-| Worker | `node dist/jobs/worker.js` | Runs low-stock/expiry/reservation-expiry jobs; run exactly one replica per queue unless jobs are idempotent. |
 | Web | `node apps/web/server.js` | Next.js standalone output. |
 
 ## Backups
 
 - Take nightly `pg_dump` snapshots plus continuous WAL archiving (or managed PITR).
 - Verify restores monthly into a scratch database and run `prisma migrate status` against it.
-- Redis holds queues and idempotency records only; it can be rebuilt, but enable AOF so in-flight
-  jobs survive a restart.
 - Never restore a production dump into a shared development database — it contains tenant data.
 
 ## Monitoring
 
-- Liveness: `GET /health`. Readiness (DB + Redis): `GET /health/ready`.
-- Track API latency (target < 500 ms for list queries), 5xx rate, queue depth and job failures.
-- Alert on inventory-specific signals: failed stock mutations, adjustments awaiting approval,
-  reservations expiring in bulk and negative-stock rejections.
+- Liveness: `GET /health`. Readiness (database): `GET /health/ready`.
+- Track API latency (target < 500 ms for list queries) and the 5xx rate.
 
 ## Logging
 
