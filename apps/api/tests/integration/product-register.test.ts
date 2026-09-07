@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { prisma } from '../../src/lib/prisma';
 import { api, auth, login, Session } from '../helpers';
 
 let session: Session;
@@ -60,6 +61,79 @@ describe('product register', () => {
     await withAuth(api().post('/api/products'))
       .send({ name: 'Negative stock', purchasePrice: 10, currentStock: -5 })
       .expect(422);
+  });
+
+  it('deletes several selected products in one request', async () => {
+    const ids: string[] = [];
+    for (const suffix of ['A', 'B', 'C']) {
+      const response = await withAuth(api().post('/api/products'))
+        .send({ name: `Bulk Tape ${suffix} ${Date.now()}`, purchasePrice: 20, currentStock: 5 })
+        .expect(201);
+      ids.push((response.body.data as { id: string }).id);
+    }
+
+    const removed = await withAuth(api().post('/api/products/bulk-delete'))
+      .send({ ids })
+      .expect(200);
+    expect((removed.body.data as { deleted: number }).deleted).toBe(3);
+
+    for (const id of ids) {
+      await withAuth(api().get(`/api/products/${id}`)).expect(404);
+    }
+  });
+
+  it('deletes a product that legacy inventory records still reference', async () => {
+    const create = await withAuth(api().post('/api/products'))
+      .send({ name: `Linked Tape ${Date.now()}`, purchasePrice: 30, currentStock: 8 })
+      .expect(201);
+    const { id } = create.body.data as { id: string };
+
+    const existingWarehouse = await prisma.warehouse.findFirst({
+      where: { organizationId: session.organizationId },
+      select: { id: true },
+    });
+    const warehouse =
+      existingWarehouse ??
+      (await prisma.warehouse.create({
+        data: {
+          organizationId: session.organizationId,
+          code: `WH-TEST-${Date.now()}`,
+          name: 'Legacy Warehouse',
+        },
+        select: { id: true },
+      }));
+
+    await prisma.inventoryStock.create({
+      data: {
+        organizationId: session.organizationId,
+        productId: id,
+        warehouseId: warehouse.id,
+        quantity: 8,
+      },
+    });
+    await prisma.inventoryLedger.create({
+      data: {
+        organizationId: session.organizationId,
+        productId: id,
+        warehouseId: warehouse.id,
+        transactionType: 'ADJUSTMENT_IN',
+        quantityBefore: 0,
+        quantityChange: 8,
+        quantityAfter: 8,
+      },
+    });
+    await prisma.stockAdjustment.create({
+      data: {
+        organizationId: session.organizationId,
+        adjustmentNumber: `ADJ-TEST-${Date.now()}`,
+        warehouseId: warehouse.id,
+        reason: 'PHYSICAL_COUNT',
+        items: { create: [{ productId: id, quantityChange: 8 }] },
+      },
+    });
+
+    await withAuth(api().delete(`/api/products/${id}`)).expect(200);
+    await withAuth(api().get(`/api/products/${id}`)).expect(404);
   });
 
   it('reports catalogue totals on the dashboard summary', async () => {

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { created, ok, pageMeta } from '../../lib/http';
@@ -78,6 +79,32 @@ async function generateSku(organizationId: string, name: string): Promise<string
     });
     if (!clash) return candidate;
   }
+}
+
+/**
+ * Rows in the tables the register no longer exposes still point at products
+ * and block deletion, so they are cleared alongside the product itself.
+ */
+async function purgeProducts(tx: Prisma.TransactionClient, ids: string[]): Promise<number> {
+  const product = { productId: { in: ids } };
+  await tx.inventoryLedger.deleteMany({ where: product });
+  await tx.inventoryReservation.deleteMany({ where: product });
+  await tx.inventoryBatch.deleteMany({ where: product });
+  await tx.inventoryStock.deleteMany({ where: product });
+  await tx.stockTransferItem.deleteMany({ where: product });
+  await tx.stockAdjustmentItem.deleteMany({ where: product });
+  await tx.wastage.deleteMany({ where: product });
+  await tx.purchaseOrderItem.deleteMany({ where: product });
+  await tx.goodsReceiptItem.deleteMany({ where: product });
+  await tx.purchaseReturnItem.deleteMany({ where: product });
+  await tx.ecommerceOrderItem.deleteMany({ where: product });
+  await tx.restaurantOrderItem.deleteMany({ where: product });
+  await tx.recipeItem.deleteMany({ where: { ingredientProductId: { in: ids } } });
+  await tx.productBundleItem.deleteMany({ where: { componentProductId: { in: ids } } });
+  await tx.supplierProduct.deleteMany({ where: product });
+  await tx.productVariant.deleteMany({ where: product });
+  const result = await tx.product.deleteMany({ where: { id: { in: ids } } });
+  return result.count;
 }
 
 const SORTABLE = ['name', 'purchasePrice', 'currentStock', 'stockDate', 'createdAt'] as const;
@@ -198,37 +225,43 @@ router.delete(
     });
     if (!existing) throw notFound('PRODUCT_NOT_FOUND', 'Product not found.');
 
-    // A product no historic record references is removed outright; one that is
-    // still referenced is archived so those records stay readable.
-    try {
-      await prisma.product.delete({ where: { id: existing.id } });
-      await auditFromRequest(req, {
-        action: 'PRODUCT_DELETED',
-        module: 'product',
-        entityType: 'Product',
-        entityId: existing.id,
-        oldValue: existing,
-      });
-      return ok(res, { id: existing.id, deleted: true });
-    } catch (err) {
-      const code = (err as { code?: string }).code;
-      if (code !== 'P2003' && code !== 'P2014') throw err;
-    }
-
-    const product = await prisma.product.update({
-      where: { id: existing.id },
-      data: { status: 'ARCHIVED' },
-      select: SELECT,
-    });
+    await prisma.$transaction((tx) => purgeProducts(tx, [existing.id]));
     await auditFromRequest(req, {
-      action: 'PRODUCT_ARCHIVED',
+      action: 'PRODUCT_DELETED',
       module: 'product',
       entityType: 'Product',
-      entityId: product.id,
+      entityId: existing.id,
       oldValue: existing,
-      newValue: product,
     });
-    return ok(res, product);
+    return ok(res, { id: existing.id, deleted: true });
+  }),
+);
+
+router.post(
+  '/bulk-delete',
+  requirePermission('product.delete'),
+  validate({ body: z.object({ ids: z.array(z.string().uuid()).min(1).max(500) }) }),
+  asyncHandler(async (req, res) => {
+    const { ids } = req.body as { ids: string[] };
+    const products = await prisma.product.findMany({
+      where: { id: { in: ids }, organizationId: orgId(req) },
+      select: { id: true, name: true },
+    });
+    if (products.length === 0) throw notFound('PRODUCT_NOT_FOUND', 'No matching products found.');
+
+    const deleted = await prisma.$transaction((tx) =>
+      purgeProducts(
+        tx,
+        products.map((product) => product.id),
+      ),
+    );
+    await auditFromRequest(req, {
+      action: 'PRODUCTS_BULK_DELETED',
+      module: 'product',
+      entityType: 'Product',
+      oldValue: products,
+    });
+    return ok(res, { deleted });
   }),
 );
 

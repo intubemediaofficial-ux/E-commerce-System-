@@ -8,4 +8,5 @@ export const NAVIGATION: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', permission: 'product.view' },
   { href: '/products', label: 'Products', permission: 'product.view' },
   { href: '/products/new', label: 'Add Product', permission: 'product.create' },
+  { href: '/users', label: 'User Management', permission: 'user.manage' },
 ];
