@@ -7,7 +7,7 @@ import { badRequest, notFound } from '../../lib/errors';
 import { nonNegativeDecimal, paginationSchema, skipTake, uuidParam } from '../../lib/query';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import { orgId, requirePermission, userId } from '../../middleware/auth';
+import { orgId, requirePermission } from '../../middleware/auth';
 import { auditFromRequest } from '../../services/audit.service';
 import { ALL_PERMISSIONS, PERMISSIONS, Permission } from '../../auth/permissions';
 import usersRouter from './users.routes';
@@ -311,73 +311,6 @@ adminRouter.get(
       prisma.auditLog.count({ where }),
     ]);
     return ok(res, rows, pageMeta(q.page, q.perPage, total));
-  }),
-);
-
-// ---------------------------------------------------------- notifications ---
-
-export const notificationsRouter = Router();
-
-notificationsRouter.get(
-  '/',
-  requirePermission('notification.view'),
-  validate({ query: paginationSchema.extend({ unreadOnly: z.coerce.boolean().optional() }) }),
-  asyncHandler(async (req, res) => {
-    const q = req.query as unknown as z.infer<typeof paginationSchema> & { unreadOnly?: boolean };
-    const where: Prisma.NotificationWhereInput = {
-      organizationId: orgId(req),
-      OR: [{ userId: userId(req) }, { userId: null }],
-      ...(q.unreadOnly ? { readAt: null } : {}),
-    };
-    const [rows, total, unread] = await Promise.all([
-      prisma.notification.findMany({
-        where,
-        ...skipTake(q),
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.notification.count({ where }),
-      prisma.notification.count({
-        where: {
-          organizationId: orgId(req),
-          OR: [{ userId: userId(req) }, { userId: null }],
-          readAt: null,
-        },
-      }),
-    ]);
-    return ok(res, { notifications: rows, unreadCount: unread }, pageMeta(q.page, q.perPage, total));
-  }),
-);
-
-notificationsRouter.post(
-  '/:id/read',
-  requirePermission('notification.view'),
-  validate({ params: uuidParam }),
-  asyncHandler(async (req, res) => {
-    const notification = await prisma.notification.findFirst({
-      where: { id: req.params.id, organizationId: orgId(req) },
-    });
-    if (!notification) throw notFound('NOT_FOUND', 'Notification not found.');
-    const updated = await prisma.notification.update({
-      where: { id: notification.id },
-      data: { readAt: new Date() },
-    });
-    return ok(res, updated);
-  }),
-);
-
-notificationsRouter.post(
-  '/read-all',
-  requirePermission('notification.view'),
-  asyncHandler(async (req, res) => {
-    const result = await prisma.notification.updateMany({
-      where: {
-        organizationId: orgId(req),
-        OR: [{ userId: userId(req) }, { userId: null }],
-        readAt: null,
-      },
-      data: { readAt: new Date() },
-    });
-    return ok(res, { updated: result.count });
   }),
 );
 

@@ -15,26 +15,12 @@ services:
       timeout: 5s
       retries: 20
 
-  redis:
-    image: redis:7-alpine
-    command: ['redis-server', '--appendonly', 'yes']
-    ports:
-      - '6379:6379'
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ims}?schema=public
-      REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
@@ -45,24 +31,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     command: sh -c "npx prisma migrate deploy && node dist/server.js"
-
-  worker:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ims}?schema=public
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
-      NODE_ENV: production
-    depends_on:
-      api:
-        condition: service_started
-    command: ['node', 'dist/jobs/worker.js']
 
   web:
     build:
@@ -80,4 +49,3 @@ services:
 
 volumes:
   postgres-data:
-  redis-data:

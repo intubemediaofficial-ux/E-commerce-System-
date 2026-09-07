@@ -77,54 +77,14 @@ const simpleOp = (
 
 const idParam = [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }];
 
-const reportParams = [
-  { name: 'format', in: 'query', schema: { type: 'string', enum: ['json', 'csv', 'excel', 'pdf'] } },
-  { name: 'warehouseId', in: 'query', schema: { type: 'string', format: 'uuid' } },
-  { name: 'from', in: 'query', schema: { type: 'string', format: 'date' } },
-  { name: 'to', in: 'query', schema: { type: 'string', format: 'date' } },
-];
-
-const reportPaths = [
-  'current-stock',
-  'stock-ledger',
-  'valuation',
-  'low-stock',
-  'expiry',
-  'wastage',
-  'adjustments',
-  'transfers',
-  'purchases',
-  'supplier-purchases',
-  'purchase-returns',
-  'price-history',
-  'sales',
-  'product-sales',
-  'stock-movement',
-  'audit',
-].reduce<Record<string, object>>((acc, name) => {
-  acc[`/api/reports/${name}`] = {
-    get: {
-      tags: ['Reports'],
-      summary: `${name} report (json/csv/excel/pdf)`,
-      security: bearer,
-      parameters: reportParams,
-      responses: { 200: { description: 'Report payload or file download' } },
-    },
-  };
-  return acc;
-}, {});
-
 export const openApiDocument = {
   openapi: '3.0.3',
   info: {
-    title: 'Inventory Management System API',
+    title: 'Product Register API',
     version: '1.0.0',
     description: [
-      'Multi-tenant inventory and e-commerce management API.',
-      '',
-      'Guarantees: every stock change is transactional, writes an immutable ledger row,',
-      'is permission checked, is audited, and can be made idempotent with the',
-      '`Idempotency-Key` header.',
+      'Multi-tenant product register: product photo, title, cost price,',
+      'warehouse/shop name, date and the current stock quantity.',
       '',
       `Permissions: ${ALL_PERMISSIONS.join(', ')}`,
     ].join('\n'),
@@ -132,13 +92,8 @@ export const openApiDocument = {
   servers: [{ url: 'http://localhost:4000', description: 'Local' }],
   tags: [
     { name: 'Auth' },
-    { name: 'Master Data' },
     { name: 'Products' },
-    { name: 'Inventory' },
-    { name: 'Transfers' },
-    { name: 'Purchasing' },
-    { name: 'E-commerce' },
-    { name: 'Reports' },
+    { name: 'Uploads' },
     { name: 'Dashboard' },
     { name: 'Admin' },
   ],
@@ -164,13 +119,7 @@ export const openApiDocument = {
               code: {
                 type: 'string',
                 enum: [
-                  'INSUFFICIENT_STOCK',
                   'PRODUCT_NOT_FOUND',
-                  'WAREHOUSE_NOT_FOUND',
-                  'DUPLICATE_SKU',
-                  'INVALID_QUANTITY',
-                  'PURCHASE_NOT_FOUND',
-                  'TRANSFER_NOT_FOUND',
                   'UNAUTHORIZED',
                   'FORBIDDEN',
                   'VALIDATION_ERROR',
@@ -230,104 +179,20 @@ export const openApiDocument = {
     '/api/auth/reset-password': { post: simpleOp('Auth', 'Reset password with a token', { body: true }) },
     '/api/auth/verify-email': { post: simpleOp('Auth', 'Verify an email address', { body: true }) },
 
-    '/api/categories': { get: listOp('Master Data', 'List categories'), post: simpleOp('Master Data', 'Create category', { body: true }) },
-    '/api/categories/tree': { get: simpleOp('Master Data', 'Hierarchical category tree') },
-    '/api/brands': { get: listOp('Master Data', 'List brands'), post: simpleOp('Master Data', 'Create brand', { body: true }) },
-    '/api/units': { get: listOp('Master Data', 'List units'), post: simpleOp('Master Data', 'Create unit', { body: true }) },
-    '/api/units/convert': { get: simpleOp('Master Data', 'Convert a quantity between units') },
-    '/api/locations': { get: listOp('Master Data', 'List locations'), post: simpleOp('Master Data', 'Create location', { body: true }) },
-    '/api/warehouses': { get: listOp('Master Data', 'List warehouses'), post: simpleOp('Master Data', 'Create warehouse', { body: true }) },
-    '/api/suppliers': { get: listOp('Master Data', 'List suppliers'), post: simpleOp('Master Data', 'Create supplier', { body: true }) },
-    '/api/suppliers/{id}/history': { get: simpleOp('Purchasing', 'Supplier purchase history and balance', { params: idParam }) },
-
-    '/api/products': { get: listOp('Products', 'List products'), post: simpleOp('Products', 'Create product', { body: true }) },
-    '/api/products/{id}/restore': { post: simpleOp('Products', 'Restore an archived product', { params: idParam }) },
+    '/api/products': {
+      get: listOp('Products', 'List products'),
+      post: simpleOp('Products', 'Create product', { body: true }),
+    },
     '/api/products/{id}': {
-      get: simpleOp('Products', 'Product detail with stock and movement history', { params: idParam }),
+      get: simpleOp('Products', 'Product detail', { params: idParam }),
       put: simpleOp('Products', 'Update product', { body: true, params: idParam }),
-      delete: simpleOp('Products', 'Archive product', { params: idParam }),
+      delete: simpleOp('Products', 'Delete product', { params: idParam }),
     },
-    '/api/products/{id}/variants': {
-      get: simpleOp('Products', 'List variants', { params: idParam }),
-      post: simpleOp('Products', 'Create variant', { body: true, params: idParam }),
-    },
-    '/api/products/{id}/bundle': {
-      get: simpleOp('Products', 'Bundle configuration', { params: idParam }),
-      put: simpleOp('Products', 'Replace bundle components', { body: true, params: idParam }),
-    },
+    '/api/uploads/images': { post: simpleOp('Uploads', 'Upload a product image') },
 
-    '/api/inventory': { get: listOp('Inventory', 'Stock rows with reserved/available/value') },
-    '/api/inventory/summary': { get: simpleOp('Inventory', 'Aggregate stock KPIs') },
-    '/api/inventory/ledger': { get: listOp('Inventory', 'Immutable stock ledger') },
-    '/api/inventory/adjust': { post: simpleOp('Inventory', 'Create stock adjustment', { body: true, idempotent: true }) },
-    '/api/inventory/adjustments/{id}/approve': {
-      post: simpleOp('Inventory', 'Approve a high-value adjustment', { params: idParam }),
+    '/api/dashboard/summary': {
+      get: simpleOp('Dashboard', 'Product count, current stock units and purchase value'),
     },
-    '/api/inventory/wastage': { post: simpleOp('Inventory', 'Record wastage', { body: true, idempotent: true }) },
-    '/api/inventory/batches/list': { get: listOp('Inventory', 'Batches with expiry') },
-    '/api/inventory/expiry/summary': { get: simpleOp('Inventory', 'Expiry buckets (today/7/15/30 days)') },
-    '/api/inventory/{productId}': { get: simpleOp('Inventory', 'Per-product inventory detail') },
-
-    '/api/stock-transfers': {
-      get: listOp('Transfers', 'List transfers'),
-      post: simpleOp('Transfers', 'Create transfer', { body: true }),
-    },
-    '/api/stock-transfers/{id}/approve': { post: simpleOp('Transfers', 'Approve transfer', { params: idParam }) },
-    '/api/stock-transfers/{id}/dispatch': {
-      post: simpleOp('Transfers', 'Dispatch (deducts source stock)', { params: idParam, idempotent: true }),
-    },
-    '/api/stock-transfers/{id}/receive': {
-      post: simpleOp('Transfers', 'Receive (credits destination, supports partial)', {
-        body: true,
-        params: idParam,
-        idempotent: true,
-      }),
-    },
-    '/api/stock-transfers/{id}/cancel': { post: simpleOp('Transfers', 'Cancel before dispatch', { params: idParam }) },
-
-    '/api/purchase-orders': {
-      get: listOp('Purchasing', 'List purchase orders'),
-      post: simpleOp('Purchasing', 'Create purchase order', { body: true }),
-    },
-    '/api/purchase-orders/{id}': {
-      get: simpleOp('Purchasing', 'Purchase order detail', { params: idParam }),
-      put: simpleOp('Purchasing', 'Update draft purchase order', { body: true, params: idParam }),
-    },
-    '/api/purchase-orders/{id}/approve': { post: simpleOp('Purchasing', 'Approve purchase order', { params: idParam }) },
-    '/api/purchase-orders/{id}/cancel': { post: simpleOp('Purchasing', 'Cancel purchase order', { params: idParam }) },
-    '/api/purchase-orders/{id}/receive': {
-      post: simpleOp('Purchasing', 'Receive goods (GRN, batches, partial receiving)', {
-        body: true,
-        params: idParam,
-        idempotent: true,
-      }),
-    },
-    '/api/purchase-returns': {
-      get: listOp('Purchasing', 'List purchase returns'),
-      post: simpleOp('Purchasing', 'Create purchase return', { body: true, idempotent: true }),
-    },
-
-    '/api/ecommerce/orders': {
-      get: listOp('E-commerce', 'List orders'),
-      post: simpleOp('E-commerce', 'Create order', { body: true }),
-    },
-    '/api/ecommerce/orders/{id}/confirm': {
-      post: simpleOp('E-commerce', 'Confirm payment and reserve stock', { params: idParam, idempotent: true }),
-    },
-    '/api/ecommerce/orders/{id}/ship': {
-      post: simpleOp('E-commerce', 'Ship (consumes reservations)', { params: idParam, idempotent: true }),
-    },
-    '/api/ecommerce/orders/{id}/cancel': {
-      post: simpleOp('E-commerce', 'Cancel and release reservations', { params: idParam, idempotent: true }),
-    },
-    '/api/ecommerce/orders/{id}/return': {
-      post: simpleOp('E-commerce', 'Validate a return and restock', { body: true, params: idParam, idempotent: true }),
-    },
-    '/api/ecommerce/reservations': { get: listOp('E-commerce', 'List reservations') },
-    '/api/ecommerce/customers': { get: listOp('E-commerce', 'Customers derived from orders') },
-
-    '/api/dashboard/admin': { get: simpleOp('Dashboard', 'Admin KPIs') },
-    '/api/dashboard/ecommerce': { get: simpleOp('Dashboard', 'Sales KPIs and reservations') },
 
     '/api/admin/users': { get: listOp('Admin', 'List users'), post: simpleOp('Admin', 'Create user', { body: true }) },
     '/api/admin/users/{id}': {
@@ -346,14 +211,6 @@ export const openApiDocument = {
       get: simpleOp('Admin', 'Organization profile'),
       put: simpleOp('Admin', 'Update organization', { body: true }),
     },
-    '/api/admin/settings': {
-      get: simpleOp('Admin', 'Inventory business settings'),
-      put: simpleOp('Admin', 'Update business settings', { body: true }),
-    },
     '/api/admin/audit-logs': { get: listOp('Admin', 'Immutable audit log') },
-    '/api/notifications': { get: listOp('Admin', 'Notification center with unread count') },
-    '/api/notifications/read-all': { post: simpleOp('Admin', 'Mark all notifications read') },
-
-    ...reportPaths,
   },
 } as const;
