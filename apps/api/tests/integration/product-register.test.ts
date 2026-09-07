@@ -88,17 +88,26 @@ describe('product register', () => {
       .expect(201);
     const { id } = create.body.data as { id: string };
 
-    const warehouse = await prisma.warehouse.findFirst({
+    const existingWarehouse = await prisma.warehouse.findFirst({
       where: { organizationId: session.organizationId },
       select: { id: true },
     });
-    expect(warehouse).not.toBeNull();
+    const warehouse =
+      existingWarehouse ??
+      (await prisma.warehouse.create({
+        data: {
+          organizationId: session.organizationId,
+          code: `WH-TEST-${Date.now()}`,
+          name: 'Legacy Warehouse',
+        },
+        select: { id: true },
+      }));
 
     await prisma.inventoryStock.create({
       data: {
         organizationId: session.organizationId,
         productId: id,
-        warehouseId: warehouse!.id,
+        warehouseId: warehouse.id,
         quantity: 8,
       },
     });
@@ -106,7 +115,7 @@ describe('product register', () => {
       data: {
         organizationId: session.organizationId,
         productId: id,
-        warehouseId: warehouse!.id,
+        warehouseId: warehouse.id,
         transactionType: 'ADJUSTMENT_IN',
         quantityBefore: 0,
         quantityChange: 8,
@@ -117,7 +126,7 @@ describe('product register', () => {
       data: {
         organizationId: session.organizationId,
         adjustmentNumber: `ADJ-TEST-${Date.now()}`,
-        warehouseId: warehouse!.id,
+        warehouseId: warehouse.id,
         reason: 'PHYSICAL_COUNT',
         items: { create: [{ productId: id, quantityChange: 8 }] },
       },
