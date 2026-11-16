@@ -6,13 +6,26 @@ description: How to verify the deployed Inventory/E-commerce app at ecom.intubem
 # Testing ecom.intubemedia.com in production
 
 The app is the `E-commerce-System-` monorepo: `apps/web` (Next.js App Router) + `apps/api` (Node API).
-In production both are served from **one origin** behind Nginx on `162.35.107.192`.
+In production both are served from **one origin** behind Nginx on `162.35.107.192`, run by **PM2** (not docker):
+`ecom-web` (`/var/www/ecom/apps/web`, port 3400) and `ecom-api` (`/var/www/ecom/apps/api`, port 4400); vhost
+`/etc/nginx/sites-available/ecom.intubemedia.com`; uploads in `/var/www/ecom-uploads`. `/var/www/ecom` is not a git
+checkout: deploy = `git archive origin/main`, build in a staging dir, `prisma migrate deploy`, swap dirs, `pm2 restart`.
+
+## First check: DNS points at the right box
+
+```bash
+dig +short ecom.intubemedia.com   # must be 162.35.107.192
+```
+
+If it resolves elsewhere (it once pointed at `162.35.117.25`, which had nothing on 80/443, so every request got
+"connection refused" and `curl` printed `000`), the app itself is fine: test it with
+`curl --resolve ecom.intubemedia.com:443:162.35.107.192 ...` to prove that, then fix the `ecom` A record
+(DNS for intubemedia.com is at Hostinger).
 
 ## Topology facts worth knowing before testing
 
-- `https://ecom.intubemedia.com` and `https://reels.intubemedia.com` share **one certificate**. The cert CN is
-  `reels.intubemedia.com` and `ecom.intubemedia.com` is only in the **SAN** list. That is valid — SAN governs,
-  CN is legacy. Do not report "wrong cert" just because the CN names another host.
+- `ecom.intubemedia.com` has its **own** Let's Encrypt cert (`/etc/letsencrypt/live/ecom.intubemedia.com`). It used
+  to share the reels cert; if the vhost points at another site's cert, browsers show a name-mismatch error.
 - The API is proxied **same-origin** at `/api/*`. A quick liveness probe:
   `curl -s https://ecom.intubemedia.com/api/health` should return app JSON
   (`{"success":false,"error":{"code":"UNAUTHORIZED",...}}` when unauthenticated). If you instead get
